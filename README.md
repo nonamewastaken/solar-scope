@@ -1,70 +1,43 @@
-# Project Name
+# Reference Project
 
-> Replace everything in this file with your own project. This is a template.
-> Week 3's communication exercise is writing this README, and the test is
-> simple: someone not on your team should be able to read it and understand
-> what you are building.
+This is the project your facilitators build **live, in front of you, every week**.
 
-**One sentence on what this is.** Who is it for, and what problem does it solve?
+During the first hour of each session, the Show hour, a facilitator works on
+this repository: scoping a problem, using AI and pushing back on what it
+produces, making decisions out loud, and writing the code. You watch the whole
+workflow rather than a finished result. Then in the second hour you apply the
+same idea to your own venture project.
 
-## The Problem
+Everything here is public and stays public. Read it, clone it, copy patterns
+out of it. That is what it is for.
 
-A short paragraph. What is hard today for the person you are building for, and
-how do they cope without you? This comes straight from your Week 2 problem
-statement, so you should already have it.
+## What it is not
 
-## What It Does
+It is not the answer key to your project. Your venture is different, and
+copying this code will not fit it. What transfers is the approach: how the
+problem got broken down, why a piece was built the way it was, and where the
+builder decided the AI was wrong.
 
-Three to five bullets. Keep them concrete.
-
-- ...
-- ...
-- ...
-
-## Getting It Running
-
-You need Python 3.11 or newer. If you do not have it, or you are not sure,
-read `docs/environment-setup.md` first.
-
-**macOS or Linux**
+## How to follow along
 
 ```
-bash setup.sh
-source .venv/bin/activate
-python src/app.py
+git clone https://github.com/ub-tech-studio/reference-project.git
+cd reference-project
 ```
 
-**Windows (PowerShell)**
+Then follow `docs/environment-setup.md` for your platform.
 
-```
-.\setup.ps1
-.\.venv\Scripts\Activate.ps1
-python src\app.py
-```
+Each week's work lands here after the session, so you can read back over
+anything that went past too quickly in the room.
 
-You should see a greeting printed. That means your environment works.
+## Status
 
-## Running the Tests
+The project subject is being finalised and lands here before Week 2 on
+September 17, which is the first session with a Show hour. Week 1 is
+orientation, team formation, and account setup, so there is nothing you need
+from this repository on day one.
 
-```
-pytest
-```
-
-## How We Work
-
-- `docs/git-workflow.md` is the branch, commit, pull request loop. Follow it.
-- Never commit secrets. API keys, passwords, and `.env` files stay out of the
-  repository. The `.gitignore` covers the common cases, but it cannot save you
-  from a key pasted into the code.
-- Push your work before the Tuesday evening deadline so facilitators can see
-  where you are ahead of Wednesday's review.
-
-## The Team
-
-| Name | Role | Contact |
-|---|---|---|
-| | | |
-
-## Venture Lead
-
-Who is the client for this project, and how do you reach them?
+The skeleton is already in place: a virtual environment, a `.gitignore`, a
+minimal app that runs, and a passing test. Same starting point your team
+repository gets from
+[tech-studio-starter](https://github.com/ub-tech-studio/tech-studio-starter).
