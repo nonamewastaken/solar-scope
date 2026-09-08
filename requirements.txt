@@ -1,0 +1,4 @@
+# Add your project's dependencies here, one per line.
+# Pin versions once the project is real, for example: requests==2.32.3
+
+pytest==8.3.3
