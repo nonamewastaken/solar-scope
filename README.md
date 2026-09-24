@@ -25,7 +25,15 @@ git clone https://github.com/ub-tech-studio/reference-project.git
 cd reference-project
 ```
 
-Then follow `docs/environment-setup.md` for your platform.
+Then, with [uv](https://docs.astral.sh/uv/) installed from the pre-work:
+
+```
+uv sync
+uv run main.py
+```
+
+If you see a greeting and `Python 3.14.7 is ready to build.`, your
+environment works.
 
 Each week's work lands here after the session, so you can read back over
 anything that went past too quickly in the room.
@@ -37,7 +45,8 @@ September 17, which is the first session with a Show hour. Week 1 is
 orientation, team formation, and account setup, so there is nothing you need
 from this repository on day one.
 
-The skeleton is already in place: a virtual environment, a `.gitignore`, a
-minimal app that runs, and a passing test. Same starting point your team
+The skeleton is already in place: a uv project pinned to Python 3.14.7, a
+`.gitignore`, a starter `main.py` that runs, the four `docs/` files every team
+fills in, and a pull request template. Same starting point your team
 repository gets from
 [tech-studio-starter](https://github.com/ub-tech-studio/tech-studio-starter).

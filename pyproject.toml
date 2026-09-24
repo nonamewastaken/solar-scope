@@ -1,0 +1,7 @@
+[project]
+name = "reference-project"
+version = "0.1.0"
+description = "The shared reference project facilitators build live during the Show hour."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []

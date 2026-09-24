@@ -1,23 +1,21 @@
-# Virtual environment
-.venv/
-venv/
-env/
-
 # Python
 __pycache__/
 *.py[cod]
 *.egg-info/
-.pytest_cache/
+build/
+dist/
 
-# Secrets. Never commit these.
+# uv virtual environment (every teammate makes their own with `uv sync`)
+.venv/
+
+# Secrets: never commit these. Keep API keys and passwords in .env
 .env
-*.key
-*.pem
-secrets.json
+.env.*
+!.env.example
 
-# Editor and OS
-.vscode/*
-!.vscode/extensions.json
-.idea/
+# Operating system and editor clutter
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
