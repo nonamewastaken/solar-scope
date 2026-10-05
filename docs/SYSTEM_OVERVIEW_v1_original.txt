@@ -1,0 +1,459 @@
+SOLARSCOPE MVP SYSTEM OVERVIEW
+==============================
+
+PURPOSE
+-------
+
+The SolarScope MVP will analyze one commercial rooftop solar site and explain why
+panel output dropped. It will distinguish real equipment faults from weather,
+sensor problems, communication gaps, and invalid data.
+
+The MVP must answer four questions:
+
+1. Did production fall?
+2. Was the cause weather, bad data, a bad sensor, or equipment failure?
+3. How much energy was lost?
+4. Does a technician need to be dispatched?
+
+The complete workflow must run on a laptop with one command, starting from the
+input folder and ending with saved results and finished PDF reports.
+
+
+MVP SUCCESS CRITERIA
+--------------------
+
+The MVP will be considered successful when it can:
+
+- Process the supplied 365-day synthetic dataset without manual code changes.
+- Preserve and flag duplicates, gaps, missing values, and invalid measurements.
+- Detect and exclude an unreliable hub sensor automatically.
+- Distinguish faults from snow, cloud cover, heat, and soiling.
+- Detect at least five of the six seeded faults.
+- Produce no more than two false panel dispatches.
+- Identify a slowly declining panel before it falls 10 percent behind its peers.
+- Estimate energy loss with clear and traceable calculations.
+- Generate five machine-readable result files.
+- Generate one 180-day PDF and one 365-day PDF, each containing six pages.
+- Pass automated tests for all six processing stages.
+
+
+1. MVP INPUTS
+-------------
+
+The MVP will accept one input folder containing:
+
+- readings.csv
+  Fifteen-minute hub and panel measurements, including voltage, current,
+  temperature, irradiance, and humidity.
+
+- site.json
+  Site location, timezone, array layout, panel-to-hub mapping, equipment ratings,
+  valid sensor ranges, and sentinel values.
+
+- weather.csv
+  Daily temperature, precipitation, snow, wind, cloud cover, and weather flags.
+
+- service_log.csv
+  Technician visits, reported problems, findings, repairs, labor, and parts.
+
+The pipeline must work with a new input folder that follows the same schemas. Site
+details and analysis thresholds must come from configuration rather than being
+hardcoded for the supplied dataset.
+
+
+2. ONE-COMMAND WORKFLOW
+-----------------------
+
+The user will run a command similar to:
+
+python run.py --input input/site-001 --output output/site-001
+
+The command will validate the input, run all six analytics stages, save the five
+official result files, generate both reports, and print a clear success or failure
+summary. If analysis fails, incomplete results will not be presented as successful.
+
+
+3. SIX-STAGE ANALYTICS PIPELINE
+-------------------------------
+
+Stage 1: Load and validate
+
+- Read all four input files.
+- Verify required columns, data types, and file relationships.
+- Convert UTC timestamps to the timezone defined in site.json.
+- Map p1, p2, and p3 slots to actual panel IDs.
+- Read sensor limits and sentinel values from configuration.
+
+Stage 2: Clean and organize
+
+- Preserve all original records.
+- Flag exact duplicates and conflicting duplicate timestamps.
+- Flag missing and out-of-range measurements.
+- Detect missing 15-minute intervals and longer hub outages.
+- Produce a canonical calculation dataset without deleting raw evidence.
+- Record why each excluded record is unusable.
+
+Stage 3: Check data and sensor quality
+
+- Calculate usable-data percentage for all 12 hubs.
+- Detect communication outages and timestamp offsets.
+- Compare hub irradiance and humidity behavior with neighboring hubs.
+- Detect drifting or stuck sensors.
+- Exclude unreliable hub conditions only during affected periods.
+- Prevent a bad hub sensor from creating false panel-fault dispatches.
+
+Stage 4: Estimate expected production
+
+- Calculate panel power as voltage multiplied by current.
+- Convert 15-minute power into energy in kWh.
+- Select healthy neighboring panels for comparison.
+- Establish each panel's normal relationship to its peers.
+- Adjust for trustworthy irradiance and temperature conditions.
+- Estimate expected energy and measured-versus-expected deficits.
+
+Stage 5: Classify events
+
+- Group consecutive abnormal intervals into understandable events.
+- Label each event as normal, weather, equipment fault, sensor issue, data issue,
+  early warning, or unresolved.
+- Use voltage, current, temperature, humidity, weather, affected scope, duration,
+  and peer behavior as evidence.
+- Recognize hotspot, wiring, string-outage, snow, soiling, heat, and cloud patterns.
+- Detect persistent slow decline relative to healthy peers.
+- Recommend dispatch only for active faults with sufficient evidence.
+
+Stage 6: Save results and generate reports
+
+- Save all official calculations before creating the PDFs.
+- Generate the five required result files.
+- Generate the 180-day and 365-day reports.
+- Ensure that every report value comes from a saved result.
+- Add the analysis run ID and configuration version for traceability.
+
+
+4. MVP SYSTEM COMPONENTS
+------------------------
+
+The MVP will use a simple modular-monolith design. All components will live in one
+repository and use the same analytics rules.
+
+Analytics engine
+
+- Python modules implementing the six stages above.
+- No dependency on the user interface.
+- Can run directly from the command line.
+
+Backend
+
+- A small Python API for registering a dataset, starting an analysis, checking its
+  status, viewing results, and downloading reports.
+- The API will call the same analytics engine used by the command-line runner.
+- Analysis will run as a local background job so the interface does not freeze.
+- One worker is enough for the MVP.
+
+Database
+
+- PostgreSQL will store site metadata, analysis runs, quality summaries, detected
+  events, daily panel results, dispatch recommendations, and report metadata.
+- Original CSV and JSON files and generated PDFs will remain as files on disk.
+- Paths and checksums for those files will be recorded in the database.
+- The five exported result files remain the traceable deliverables required by the
+  project brief.
+
+Frontend
+
+- A small browser dashboard will let a user select an input dataset, start an
+  analysis, see its status, review findings, and download both PDFs.
+- The frontend will display backend results but will not perform official fault or
+  energy calculations itself.
+
+The one-command pipeline remains the primary deliverable. The database, backend,
+and frontend are thin interfaces around it rather than separate large products.
+
+
+5. MVP DATABASE CONTENT
+-----------------------
+
+The MVP database will contain only the information needed to operate and review an
+analysis:
+
+- sites: site identity, location, timezone, and array information
+- datasets: input location, checksum, registration time, and validation status
+- analysis_runs: run ID, status, times, versions, and any error message
+- hub_quality: usable percentage, exclusions, and issues for each hub
+- panel_daily_results: measured energy, expected energy, loss, and classification
+- detected_events: period, affected equipment, label, cause, evidence, and loss
+- dispatch_recommendations: panel, priority, evidence, and recommended action
+- reports: report type, file location, checksum, time, and analysis run ID
+
+The MVP will not require a complex multi-organization or enterprise permission
+schema.
+
+
+6. MVP BACKEND OPERATIONS
+-------------------------
+
+The API will support these essential actions:
+
+- Create or view the single MVP site.
+- Register an input dataset.
+- Start an analysis run.
+- Read analysis status and errors.
+- Read the summary, data quality, events, warnings, and dispatch list.
+- Download the 180-day and 365-day reports.
+- Check application health and database readiness.
+
+An analysis will move through these states:
+
+UPLOADED -> VALIDATING -> QUEUED -> RUNNING -> SUCCEEDED or FAILED
+
+The backend will prevent repeated requests from accidentally creating duplicate
+official results for the same run.
+
+
+7. MVP FRONTEND SCREENS
+-----------------------
+
+The MVP frontend will contain four focused screens:
+
+1. Analysis
+   - Select the input dataset, start analysis, and view its status or error.
+
+2. Summary
+   - Actual production, estimated losses, fault and warning counts, and top three
+     findings.
+
+3. Findings
+   - Fault-versus-weather events, current dispatches, repeat repairs, early
+     warnings, and evidence for each classification.
+
+4. Data Quality and Reports
+   - Usable-data percentage for all 12 hubs, exclusions, quality issues, and
+     download links for both PDFs.
+
+The frontend will be intentionally small. A portfolio dashboard, advanced user
+management, live notifications, and real-time telemetry views are outside the MVP.
+
+
+8. FIVE OFFICIAL RESULT FILES
+-----------------------------
+
+The pipeline will create:
+
+1. data_quality.csv
+   Hub-level usable percentage and exclusion reasons.
+
+2. panel_daily.csv
+   Daily measured energy, expected energy, loss, and classification per panel.
+
+3. events.csv
+   Every grouped fault, weather event, data problem, sensor issue, and warning.
+
+4. dispatch.csv
+   Active panels requiring technician action, with cause and evidence.
+
+5. summary.json
+   Report windows, headline metrics, top findings, run information, and references
+   to the other result files.
+
+The PDFs will read these saved results instead of recalculating values inside the
+report-generation code.
+
+
+9. TWO PDF REPORTS
+------------------
+
+The MVP will generate:
+
+- A 180-day report covering 2026-03-05 through 2026-08-31.
+- A 365-day report covering 2025-09-01 through 2026-08-31.
+
+Each report will contain exactly six pages:
+
+Page 1: Summary
+- Actual production, estimated losses, active dispatch and warning counts, and the
+  top three findings.
+
+Page 2: Fault or Weather
+- Every grouped output-drop event with its period, scope, label, likely cause,
+  evidence, status, and kWh lost.
+
+Page 3: Dispatch List
+- Active actionable panel faults with priority, cause, evidence, loss, and
+  recommended technician action.
+
+Page 4: Repeat Repairs
+- Related service visits, recurrence, previous actions, root cause, and recommended
+  permanent correction.
+
+Page 5: Early Warnings
+- Panels in persistent decline, including first detection, decline rate, current
+  deficit, threshold dates, and evidence.
+
+Page 6: Data Quality and Method
+- Usable-data percentage for all hubs, excluded sensors and periods, quality issue
+  counts, analysis rules, run ID, versions, and input checksums.
+
+The reports will not contain all raw readings, source code, debug logs, or internal
+answer-key information.
+
+
+10. CONFIGURATION
+-----------------
+
+The MVP will use a human-readable configuration file for:
+
+- Sensor valid ranges and sentinel values
+- Minimum irradiance for comparison
+- Duplicate and gap rules
+- Peer-selection rules
+- Hotspot, wiring, and decline thresholds
+- Event grouping duration
+- Dispatch rules
+- Report settings
+
+The configuration used by each analysis will be copied or hashed so old results
+remain reproducible.
+
+
+11. MVP SECURITY
+----------------
+
+The MVP will use practical local security:
+
+- The application will listen only on the local machine by default.
+- Input files will be validated before processing.
+- File access will be restricted to approved project directories.
+- Secrets and database passwords will not be committed to source control.
+- Database access will use a dedicated least-privilege account.
+- Logs will not contain secrets or complete raw datasets.
+- Generated reports will not expose the internal answer key.
+
+Authentication and HTTPS are required before allowing remote or public access, but
+a complete enterprise identity system is not part of the local MVP.
+
+
+12. RELIABILITY AND ERROR HANDLING
+----------------------------------
+
+The MVP will:
+
+- Preserve raw input even when records are invalid.
+- Use checksums to recognize repeated input files.
+- Avoid publishing partial results as successful.
+- Save clear failure messages with the analysis run.
+- Allow report generation to be retried after calculations succeed.
+- Make repeated execution safe for the same run ID.
+- Write result files safely so interrupted writes do not replace valid outputs.
+- Keep previous successful outputs until a new run completes successfully.
+
+
+13. LOGGING AND MONITORING
+--------------------------
+
+MVP observability will remain lightweight:
+
+- Structured application logs
+- Analysis run ID in every pipeline-stage log
+- Stage start, completion, duration, and failure messages
+- API health and database readiness endpoints
+- Counts of rejected datasets and failed analyses
+- Data-quality metrics included in results and reports
+
+A distributed tracing system or external monitoring platform is not required for
+the laptop MVP.
+
+
+14. TESTING
+-----------
+
+The MVP will include:
+
+- Unit tests for every processing stage.
+- Timestamp and daylight-saving-time tests.
+- Tests for missing, duplicate, conflicting, and out-of-range data.
+- Tests for power and energy calculations.
+- Tests for sensor drift and clock-offset detection.
+- Tests for hotspot, wiring, string-outage, weather, and decline rules.
+- Integration tests from input folder to saved result files.
+- Report tests confirming two PDFs with six readable pages each.
+- Regression tests against the supplied synthetic dataset.
+- Hand-calculation checks within the required tolerance.
+
+
+15. MVP PROJECT STRUCTURE
+-------------------------
+
+SolarScope/
+|-- app/
+|   |-- api.py
+|   |-- worker.py
+|   `-- database.py
+|-- web/
+|   `-- frontend source
+|-- solarscope/
+|   |-- load.py
+|   |-- clean.py
+|   |-- quality.py
+|   |-- expected.py
+|   |-- classify.py
+|   `-- report.py
+|-- config/
+|   `-- thresholds.yaml
+|-- database/
+|   `-- migrations/
+|-- tests/
+|-- input/
+|-- output/
+|-- run.py
+|-- docker-compose.yml
+`-- README.md
+
+
+16. MVP TECHNOLOGY CHOICES
+--------------------------
+
+- Python for analytics and the backend
+- pandas and NumPy for data processing
+- FastAPI for the small backend API
+- PostgreSQL for analysis metadata and summarized results
+- React with TypeScript for the small browser interface
+- Local file storage for inputs, result files, and PDFs
+- Docker Compose for a reproducible local environment
+- Automated formatting, linting, type checking, and tests
+
+Redis, Kubernetes, cloud object storage, microservices, and a message broker are not
+required. The background job can begin with one local worker and a database-backed
+job record.
+
+
+17. OUT OF SCOPE FOR THE MVP
+----------------------------
+
+The MVP will not include:
+
+- Live telemetry ingestion from physical hubs
+- Multiple customer organizations
+- Enterprise single sign-on
+- Mobile applications
+- Email, SMS, or push notifications
+- Automatic technician scheduling
+- Inventory or work-order management
+- Machine-learning model training
+- Microservices or Kubernetes
+- High-availability multi-region deployment
+- Real-time streaming dashboards
+- A general-purpose report designer
+
+
+18. MAIN MVP ARCHITECTURAL PRINCIPLE
+------------------------------------
+
+The MVP will have one independent and reproducible analytics engine. The command-
+line runner, backend, database, frontend, result files, and reports will all use the
+same official calculations without duplicating business rules.
+
+The primary objective is a correct, traceable, testable pipeline that explains the
+supplied dataset and produces the required reports with one command. The web
+interface will remain a thin layer that makes this pipeline easier to operate and
+review.

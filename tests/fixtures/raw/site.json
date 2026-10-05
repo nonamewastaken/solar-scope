@@ -1,0 +1,192 @@
+{
+  "site_id": "SS-FIXTURE-001",
+  "site_name": "Fixture: 2 hubs, 1 row",
+  "data_note": "Synthetic data generated for the SolarScope Tech Studio MVP 1. Not a real customer.",
+  "location": {
+    "latitude": 42.8864,
+    "longitude": -78.8784,
+    "elevation_m": 180,
+    "timezone": "America/New_York"
+  },
+  "commissioned_date": "2025-06-15",
+  "monitoring_start": "2025-11-01",
+  "installation_type": "flat roof, ballasted racking, south facing",
+  "array_geometry": {
+    "tilt_deg": 10.0,
+    "azimuth_deg": 180.0,
+    "rows": 1,
+    "panels_per_row": 6,
+    "row_notes": {}
+  },
+  "electrical": {
+    "architecture": "each panel feeds a DC power optimizer, 12 optimizers per string, 3 strings into one 15 kW string inverter",
+    "note": "optimizers let every panel run at its own maximum power point, so per panel voltage and current are independent",
+    "inverter": {
+      "model": "Generic 15 kW three phase string inverter",
+      "ac_rating_kw": 15.0
+    },
+    "strings": [
+      {
+        "string_id": "S1",
+        "row": "R1",
+        "fuse_a": 15,
+        "panels": [
+          "P01",
+          "P02",
+          "P03",
+          "P04",
+          "P05",
+          "P06"
+        ]
+      }
+    ]
+  },
+  "module": {
+    "model": "Reference 400 W monocrystalline, 108 half cut cells",
+    "count": 6,
+    "stc_rating_w": 400,
+    "vmp_v": 37.1,
+    "imp_a": 10.78,
+    "voc_v": 44.6,
+    "isc_a": 11.42,
+    "temp_coefficients": {
+      "pmax_pct_per_c": -0.35,
+      "voc_pct_per_c": -0.27,
+      "isc_pct_per_c": 0.048
+    },
+    "noct_c": 45,
+    "bypass_diodes": 3,
+    "power_tolerance_w": "0 to +5",
+    "annual_degradation_pct": 0.4
+  },
+  "hubs": [
+    {
+      "hub_id": "H01",
+      "row": "R1",
+      "string_id": "S1",
+      "position_in_row": 1,
+      "panels": {
+        "p1": "P01",
+        "p2": "P02",
+        "p3": "P03"
+      },
+      "panel_columns": [
+        "P01",
+        "P02",
+        "P03"
+      ]
+    },
+    {
+      "hub_id": "H02",
+      "row": "R1",
+      "string_id": "S1",
+      "position_in_row": 2,
+      "panels": {
+        "p1": "P04",
+        "p2": "P05",
+        "p3": "P06"
+      },
+      "panel_columns": [
+        "P04",
+        "P05",
+        "P06"
+      ]
+    }
+  ],
+  "sensors": {
+    "reading_interval_min": 15,
+    "per_panel": {
+      "voltage_v": "panel DC voltage at optimizer input",
+      "current_a": "panel DC current",
+      "temp_c": "back of panel temperature, adhesive thermistor at panel center"
+    },
+    "per_hub": {
+      "irradiance_wm2": "plane of array irradiance, silicon reference cell on the hub, same tilt as panels",
+      "humidity_pct": "relative humidity at the hub enclosure"
+    },
+    "valid_ranges": {
+      "voltage_v": [
+        0,
+        50
+      ],
+      "current_a": [
+        0,
+        13
+      ],
+      "temp_c": [
+        -35,
+        95
+      ],
+      "irradiance_wm2": [
+        0,
+        1500
+      ],
+      "humidity_pct": [
+        0,
+        100
+      ]
+    },
+    "sentinel_values": {
+      "6553.5": "ADC overflow on 16 bit channel",
+      "655.35": "ADC overflow on current channel",
+      "-40.0": "thermistor open circuit",
+      "327.6": "thermistor short"
+    }
+  },
+  "panels": [
+    {
+      "panel_id": "P01",
+      "row": "R1",
+      "column": 1,
+      "string_id": "S1",
+      "hub_id": "H01",
+      "hub_slot": "p1",
+      "serial": "RM400-25061500"
+    },
+    {
+      "panel_id": "P02",
+      "row": "R1",
+      "column": 2,
+      "string_id": "S1",
+      "hub_id": "H01",
+      "hub_slot": "p2",
+      "serial": "RM400-25061507"
+    },
+    {
+      "panel_id": "P03",
+      "row": "R1",
+      "column": 3,
+      "string_id": "S1",
+      "hub_id": "H01",
+      "hub_slot": "p3",
+      "serial": "RM400-25061514"
+    },
+    {
+      "panel_id": "P04",
+      "row": "R1",
+      "column": 4,
+      "string_id": "S1",
+      "hub_id": "H02",
+      "hub_slot": "p1",
+      "serial": "RM400-25061521"
+    },
+    {
+      "panel_id": "P05",
+      "row": "R1",
+      "column": 5,
+      "string_id": "S1",
+      "hub_id": "H02",
+      "hub_slot": "p2",
+      "serial": "RM400-25061528"
+    },
+    {
+      "panel_id": "P06",
+      "row": "R1",
+      "column": 6,
+      "string_id": "S1",
+      "hub_id": "H02",
+      "hub_slot": "p3",
+      "serial": "RM400-25061535"
+    }
+  ]
+}
