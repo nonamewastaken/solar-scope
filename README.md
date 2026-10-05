@@ -38,10 +38,11 @@ You need [uv](https://docs.astral.sh/uv/) installed. The project is pinned to Py
 git clone https://github.com/nonamewastaken/solar-scope.git
 cd solar-scope
 uv sync
-uv run main.py
+uv run pytest
+uv run run.py --input input/mvp1 --output output
 ```
 
-That single command runs the whole pipeline and writes the reports to the output folder.
+The input folder holds `readings.csv`, `site.json`, `weather.csv` and `service_log.csv`. Thresholds live in `config/thresholds.yaml` (`--config` to use another). That single command runs the whole pipeline and writes the reports to the output folder. Without uv: `pip install -r requirements.txt`.
 
 ---
 
@@ -104,12 +105,17 @@ A flowsheet diagram of the pipeline is in `docs/` and matches the code.
 
 ```
 solar-scope/
-├── main.py            # Entry point: runs the full pipeline
+├── run.py             # Entry point: runs the full pipeline
+├── solarscope/        # One module per stage (see docs/contracts.md)
+├── config/            # thresholds.yaml: every tunable number
+├── input/             # Datasets, e.g. input/mvp1 (not committed; get it from the team)
+├── output/            # Run results (not committed)
 ├── pyproject.toml     # Project config and dependencies
 ├── uv.lock            # Locked dependency versions
+├── requirements.txt   # Same pins, for pip users (uv export)
 ├── .python-version    # Python 3.14.7
-├── docs/              # Method notes and process flowsheet
-└── tests/             # One test group per pipeline step
+├── docs/              # contracts.md, method notes and process flowsheet
+└── tests/             # One test group per pipeline step, fixtures/ dataset
 ```
 
 ---

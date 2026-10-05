@@ -1,0 +1,3 @@
+ticket_id,visit_date,arrival_time_local,trigger,hub_ids,panel_ids,reported_issue,finding,action_taken,fault_found,root_cause,category,tech_hours,parts_cost_usd,parts_used,truck_roll_cost_usd
+SR-9001,2025-11-02,10:00,customer_call,ALL,ALL,Output low today,No fault found. Overcast and rain,None,N,overcast weather,weather,1.0,0,,350
+SR-9002,2025-11-03,13:30,monitoring_alert,H02,P05,P05 intermittent zero output,Loose MC4 connector,Reseated connector,Y,loose connector,wiring,1.5,12,strain relief clip,350

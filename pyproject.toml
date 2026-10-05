@@ -1,7 +1,29 @@
 [project]
-name = "reference-project"
+name = "solarscope"
 version = "0.1.0"
-description = "The shared reference project facilitators build live during the Show hour."
+description = "SolarScope MVP 1: explain every drop in rooftop solar output, input folder to PDF reports in one command."
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
+    "pandas>=3.0.6",
+    "pyyaml>=6.0.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+extend-exclude = ["SolarScope_MVP1_AnswerKey_INTERNAL"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]

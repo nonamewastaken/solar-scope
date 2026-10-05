@@ -19,3 +19,12 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# SolarScope: never commit the answer key or run outputs. The repo is PUBLIC.
+SolarScope_MVP1_AnswerKey_INTERNAL/
+answer_key/
+output/
+input/*
+!input/.gitkeep
+.pytest_cache/
+.ruff_cache/

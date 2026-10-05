@@ -1,0 +1,95 @@
+# SolarScope thresholds. Every tunable number lives here, never in code.
+# Values are Phase 1 placeholders; each section's owner refines them.
+# Tuning in Phase 3 changes this file only. Its hash is saved in summary.json.
+
+validation:                     # owner: DQ. site.json wins for any key it also sets.
+  valid_ranges:                 # [min, max] inclusive, per measure
+    irradiance_wm2: [0, 1500]
+    humidity_pct: [0, 100]
+    voltage_v: [0, 50]
+    current_a: [0, 13]
+    temp_c: [-35, 95]
+  sentinel_values: {}           # value -> meaning; filled from site.json
+  sentinel_tolerance: 1.0e-6    # |value - sentinel| <= this counts as a sentinel
+
+clean:                          # owner: DQ
+  duplicate_keys: [timestamp_utc, hub_id]
+  conflict_keep: none           # none = conflicting values become NaN (reason "conflict")
+  gap_min_intervals: 1          # a missing interval counts as a gap from this length
+
+quality:                        # owner: DQ
+  comm_outage_min_intervals: 8  # 2 h with no record = communication outage
+  peer_group: row               # hub sensors are compared with hubs in the same row
+  min_peer_hubs: 2
+  drift:
+    min_irradiance_wm2: 200     # compare sensors only in daylight
+    ratio_tolerance: 0.10       # hub / row median outside 1 +- this = drifting
+    min_days: 3                 # sustained this long before excluding
+    rolling_days: 7
+  stuck:
+    min_intervals: 16           # identical value this many intervals in a row
+    humidity_stuck_values: [100.0]
+  fallback: row_median          # irradiance substitute for an excluded hub sensor
+
+expected:                       # owner: EXP
+  min_irradiance_wm2: 50        # skip intervals below this
+  reference_temp_c: 25
+  peer:
+    group: hub_then_row         # hub mates first, row if not enough healthy hub mates
+    min_peers: 2
+    reference_period_days: 30   # clean period used to normalize each panel's ratio
+  hand_calc_tolerance_pct: 2
+
+decline:                        # owner: EXP
+  rolling_days: 14
+  min_history_days: 30
+  slope_threshold_pct_per_month: -1.0
+  deficit_threshold_pct: 3.0    # flag well before the 10% mark
+  alarm_deficit_pct: 10.0       # used for projected_10pct_date
+  ignore_causes: [snow, soiling, sensor_drift, sensor_stuck]
+
+classify:                       # owner: CLS
+  grouping:
+    max_gap_intervals: 4        # abnormal intervals this close are one event
+    min_event_intervals: 2
+  abnormal_peer_ratio: 0.85     # below this = abnormal interval
+  string_outage:
+    current_max_a: 0.2
+    voltage_min_frac_voc: 0.9
+    min_irradiance_wm2: 200
+  wiring:
+    zero_current_max_a: 0.1
+    min_dropouts_per_day: 2
+  hotspot:
+    voltage_step_frac: 0.33
+    voltage_step_tolerance: 0.08
+    temp_delta_c: 5.0
+  snow:
+    snwd_min_in: 0.1
+  soiling:
+    min_days: 7
+    reset_rain_in: 0.25
+  heat:
+    temp_min_c: 50
+  cloud:
+    acsh_min_pct: 70
+
+dispatch:                       # owner: CLS
+  require_active: true          # only faults still active at the window end
+  active_tolerance_hours: 24
+  min_event_hours: 2
+  min_kwh_lost: 0.5
+  priority_kwh_per_day:         # kWh lost per day for each priority level
+    high: 2.0
+    medium: 0.5
+
+servicelog:                     # owner: RPT
+  match_window_days: 7          # visit matched to events within this many days before it
+  repeat_min_repairs: 2
+
+report_windows:                 # owner: INT. Lengths, not dates.
+  end_date: null                # null = last complete local day in readings.csv
+  windows:
+    - {name: 365d, days: 365}
+    - {name: 180d, days: 180}
+  # Optional per-window override: - {name: custom, start_date: 2026-01-01}
