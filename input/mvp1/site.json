@@ -1,0 +1,668 @@
+{
+  "site_id": "SS-TEST-001",
+  "site_name": "Synthetic Test Site: Commercial Rooftop, Buffalo NY",
+  "data_note": "Synthetic data generated for the SolarScope Tech Studio MVP 1. Not a real customer.",
+  "location": {
+    "latitude": 42.8864,
+    "longitude": -78.8784,
+    "elevation_m": 180,
+    "timezone": "America/New_York"
+  },
+  "commissioned_date": "2025-06-15",
+  "monitoring_start": "2025-09-01",
+  "installation_type": "flat roof, ballasted racking, south facing",
+  "array_geometry": {
+    "tilt_deg": 10.0,
+    "azimuth_deg": 180.0,
+    "rows": 3,
+    "panels_per_row": 12,
+    "row_notes": {
+      "R3": "southern row against the 1.2 m parapet"
+    }
+  },
+  "electrical": {
+    "architecture": "each panel feeds a DC power optimizer, 12 optimizers per string, 3 strings into one 15 kW string inverter",
+    "note": "optimizers let every panel run at its own maximum power point, so per panel voltage and current are independent",
+    "inverter": {
+      "model": "Generic 15 kW three phase string inverter",
+      "ac_rating_kw": 15.0
+    },
+    "strings": [
+      {
+        "string_id": "S1",
+        "row": "R1",
+        "panels": [
+          "P01",
+          "P02",
+          "P03",
+          "P04",
+          "P05",
+          "P06",
+          "P07",
+          "P08",
+          "P09",
+          "P10",
+          "P11",
+          "P12"
+        ],
+        "fuse_a": 15
+      },
+      {
+        "string_id": "S2",
+        "row": "R2",
+        "panels": [
+          "P13",
+          "P14",
+          "P15",
+          "P16",
+          "P17",
+          "P18",
+          "P19",
+          "P20",
+          "P21",
+          "P22",
+          "P23",
+          "P24"
+        ],
+        "fuse_a": 15
+      },
+      {
+        "string_id": "S3",
+        "row": "R3",
+        "panels": [
+          "P25",
+          "P26",
+          "P27",
+          "P28",
+          "P29",
+          "P30",
+          "P31",
+          "P32",
+          "P33",
+          "P34",
+          "P35",
+          "P36"
+        ],
+        "fuse_a": 15
+      }
+    ]
+  },
+  "module": {
+    "model": "Reference 400 W monocrystalline, 108 half cut cells",
+    "count": 36,
+    "stc_rating_w": 400,
+    "vmp_v": 37.1,
+    "imp_a": 10.78,
+    "voc_v": 44.6,
+    "isc_a": 11.42,
+    "temp_coefficients": {
+      "pmax_pct_per_c": -0.35,
+      "voc_pct_per_c": -0.27,
+      "isc_pct_per_c": 0.048
+    },
+    "noct_c": 45,
+    "bypass_diodes": 3,
+    "power_tolerance_w": "0 to +5",
+    "annual_degradation_pct": 0.4
+  },
+  "hubs": [
+    {
+      "hub_id": "H01",
+      "row": "R1",
+      "string_id": "S1",
+      "position_in_row": 1,
+      "panels": {
+        "p1": "P01",
+        "p2": "P02",
+        "p3": "P03"
+      },
+      "panel_columns": [
+        "P01",
+        "P02",
+        "P03"
+      ]
+    },
+    {
+      "hub_id": "H02",
+      "row": "R1",
+      "string_id": "S1",
+      "position_in_row": 2,
+      "panels": {
+        "p1": "P04",
+        "p2": "P05",
+        "p3": "P06"
+      },
+      "panel_columns": [
+        "P04",
+        "P05",
+        "P06"
+      ]
+    },
+    {
+      "hub_id": "H03",
+      "row": "R1",
+      "string_id": "S1",
+      "position_in_row": 3,
+      "panels": {
+        "p1": "P07",
+        "p2": "P08",
+        "p3": "P09"
+      },
+      "panel_columns": [
+        "P07",
+        "P08",
+        "P09"
+      ]
+    },
+    {
+      "hub_id": "H04",
+      "row": "R1",
+      "string_id": "S1",
+      "position_in_row": 4,
+      "panels": {
+        "p1": "P10",
+        "p2": "P11",
+        "p3": "P12"
+      },
+      "panel_columns": [
+        "P10",
+        "P11",
+        "P12"
+      ]
+    },
+    {
+      "hub_id": "H05",
+      "row": "R2",
+      "string_id": "S2",
+      "position_in_row": 1,
+      "panels": {
+        "p1": "P13",
+        "p2": "P14",
+        "p3": "P15"
+      },
+      "panel_columns": [
+        "P13",
+        "P14",
+        "P15"
+      ]
+    },
+    {
+      "hub_id": "H06",
+      "row": "R2",
+      "string_id": "S2",
+      "position_in_row": 2,
+      "panels": {
+        "p1": "P16",
+        "p2": "P17",
+        "p3": "P18"
+      },
+      "panel_columns": [
+        "P16",
+        "P17",
+        "P18"
+      ]
+    },
+    {
+      "hub_id": "H07",
+      "row": "R2",
+      "string_id": "S2",
+      "position_in_row": 3,
+      "panels": {
+        "p1": "P19",
+        "p2": "P20",
+        "p3": "P21"
+      },
+      "panel_columns": [
+        "P19",
+        "P20",
+        "P21"
+      ]
+    },
+    {
+      "hub_id": "H08",
+      "row": "R2",
+      "string_id": "S2",
+      "position_in_row": 4,
+      "panels": {
+        "p1": "P22",
+        "p2": "P23",
+        "p3": "P24"
+      },
+      "panel_columns": [
+        "P22",
+        "P23",
+        "P24"
+      ]
+    },
+    {
+      "hub_id": "H09",
+      "row": "R3",
+      "string_id": "S3",
+      "position_in_row": 1,
+      "panels": {
+        "p1": "P25",
+        "p2": "P26",
+        "p3": "P27"
+      },
+      "panel_columns": [
+        "P25",
+        "P26",
+        "P27"
+      ]
+    },
+    {
+      "hub_id": "H10",
+      "row": "R3",
+      "string_id": "S3",
+      "position_in_row": 2,
+      "panels": {
+        "p1": "P28",
+        "p2": "P29",
+        "p3": "P30"
+      },
+      "panel_columns": [
+        "P28",
+        "P29",
+        "P30"
+      ]
+    },
+    {
+      "hub_id": "H11",
+      "row": "R3",
+      "string_id": "S3",
+      "position_in_row": 3,
+      "panels": {
+        "p1": "P31",
+        "p2": "P32",
+        "p3": "P33"
+      },
+      "panel_columns": [
+        "P31",
+        "P32",
+        "P33"
+      ]
+    },
+    {
+      "hub_id": "H12",
+      "row": "R3",
+      "string_id": "S3",
+      "position_in_row": 4,
+      "panels": {
+        "p1": "P34",
+        "p2": "P35",
+        "p3": "P36"
+      },
+      "panel_columns": [
+        "P34",
+        "P35",
+        "P36"
+      ]
+    }
+  ],
+  "sensors": {
+    "reading_interval_min": 15,
+    "per_panel": {
+      "voltage_v": "panel DC voltage at optimizer input",
+      "current_a": "panel DC current",
+      "temp_c": "back of panel temperature, adhesive thermistor at panel center"
+    },
+    "per_hub": {
+      "irradiance_wm2": "plane of array irradiance, silicon reference cell on the hub, same tilt as panels",
+      "humidity_pct": "relative humidity at the hub enclosure"
+    },
+    "valid_ranges": {
+      "voltage_v": [
+        0,
+        50
+      ],
+      "current_a": [
+        0,
+        13
+      ],
+      "temp_c": [
+        -35,
+        95
+      ],
+      "irradiance_wm2": [
+        0,
+        1500
+      ],
+      "humidity_pct": [
+        0,
+        100
+      ]
+    },
+    "sentinel_values": {
+      "6553.5": "ADC overflow on 16 bit channel",
+      "655.35": "ADC overflow on current channel",
+      "-40.0": "thermistor open circuit",
+      "327.6": "thermistor short"
+    }
+  },
+  "panels": [
+    {
+      "panel_id": "P01",
+      "row": "R1",
+      "column": 1,
+      "string_id": "S1",
+      "hub_id": "H01",
+      "hub_slot": "p1",
+      "serial": "RM400-25061500"
+    },
+    {
+      "panel_id": "P02",
+      "row": "R1",
+      "column": 2,
+      "string_id": "S1",
+      "hub_id": "H01",
+      "hub_slot": "p2",
+      "serial": "RM400-25061507"
+    },
+    {
+      "panel_id": "P03",
+      "row": "R1",
+      "column": 3,
+      "string_id": "S1",
+      "hub_id": "H01",
+      "hub_slot": "p3",
+      "serial": "RM400-25061514"
+    },
+    {
+      "panel_id": "P04",
+      "row": "R1",
+      "column": 4,
+      "string_id": "S1",
+      "hub_id": "H02",
+      "hub_slot": "p1",
+      "serial": "RM400-25061521"
+    },
+    {
+      "panel_id": "P05",
+      "row": "R1",
+      "column": 5,
+      "string_id": "S1",
+      "hub_id": "H02",
+      "hub_slot": "p2",
+      "serial": "RM400-25061528"
+    },
+    {
+      "panel_id": "P06",
+      "row": "R1",
+      "column": 6,
+      "string_id": "S1",
+      "hub_id": "H02",
+      "hub_slot": "p3",
+      "serial": "RM400-25061535"
+    },
+    {
+      "panel_id": "P07",
+      "row": "R1",
+      "column": 7,
+      "string_id": "S1",
+      "hub_id": "H03",
+      "hub_slot": "p1",
+      "serial": "RM400-25061542"
+    },
+    {
+      "panel_id": "P08",
+      "row": "R1",
+      "column": 8,
+      "string_id": "S1",
+      "hub_id": "H03",
+      "hub_slot": "p2",
+      "serial": "RM400-25061549"
+    },
+    {
+      "panel_id": "P09",
+      "row": "R1",
+      "column": 9,
+      "string_id": "S1",
+      "hub_id": "H03",
+      "hub_slot": "p3",
+      "serial": "RM400-25061556"
+    },
+    {
+      "panel_id": "P10",
+      "row": "R1",
+      "column": 10,
+      "string_id": "S1",
+      "hub_id": "H04",
+      "hub_slot": "p1",
+      "serial": "RM400-25061563"
+    },
+    {
+      "panel_id": "P11",
+      "row": "R1",
+      "column": 11,
+      "string_id": "S1",
+      "hub_id": "H04",
+      "hub_slot": "p2",
+      "serial": "RM400-25061570"
+    },
+    {
+      "panel_id": "P12",
+      "row": "R1",
+      "column": 12,
+      "string_id": "S1",
+      "hub_id": "H04",
+      "hub_slot": "p3",
+      "serial": "RM400-25061577"
+    },
+    {
+      "panel_id": "P13",
+      "row": "R2",
+      "column": 1,
+      "string_id": "S2",
+      "hub_id": "H05",
+      "hub_slot": "p1",
+      "serial": "RM400-25061584"
+    },
+    {
+      "panel_id": "P14",
+      "row": "R2",
+      "column": 2,
+      "string_id": "S2",
+      "hub_id": "H05",
+      "hub_slot": "p2",
+      "serial": "RM400-25061591"
+    },
+    {
+      "panel_id": "P15",
+      "row": "R2",
+      "column": 3,
+      "string_id": "S2",
+      "hub_id": "H05",
+      "hub_slot": "p3",
+      "serial": "RM400-25061598"
+    },
+    {
+      "panel_id": "P16",
+      "row": "R2",
+      "column": 4,
+      "string_id": "S2",
+      "hub_id": "H06",
+      "hub_slot": "p1",
+      "serial": "RM400-25061605"
+    },
+    {
+      "panel_id": "P17",
+      "row": "R2",
+      "column": 5,
+      "string_id": "S2",
+      "hub_id": "H06",
+      "hub_slot": "p2",
+      "serial": "RM400-25061612"
+    },
+    {
+      "panel_id": "P18",
+      "row": "R2",
+      "column": 6,
+      "string_id": "S2",
+      "hub_id": "H06",
+      "hub_slot": "p3",
+      "serial": "RM400-25061619"
+    },
+    {
+      "panel_id": "P19",
+      "row": "R2",
+      "column": 7,
+      "string_id": "S2",
+      "hub_id": "H07",
+      "hub_slot": "p1",
+      "serial": "RM400-25061626"
+    },
+    {
+      "panel_id": "P20",
+      "row": "R2",
+      "column": 8,
+      "string_id": "S2",
+      "hub_id": "H07",
+      "hub_slot": "p2",
+      "serial": "RM400-25061633"
+    },
+    {
+      "panel_id": "P21",
+      "row": "R2",
+      "column": 9,
+      "string_id": "S2",
+      "hub_id": "H07",
+      "hub_slot": "p3",
+      "serial": "RM400-25061640"
+    },
+    {
+      "panel_id": "P22",
+      "row": "R2",
+      "column": 10,
+      "string_id": "S2",
+      "hub_id": "H08",
+      "hub_slot": "p1",
+      "serial": "RM400-25061647"
+    },
+    {
+      "panel_id": "P23",
+      "row": "R2",
+      "column": 11,
+      "string_id": "S2",
+      "hub_id": "H08",
+      "hub_slot": "p2",
+      "serial": "RM400-25061654"
+    },
+    {
+      "panel_id": "P24",
+      "row": "R2",
+      "column": 12,
+      "string_id": "S2",
+      "hub_id": "H08",
+      "hub_slot": "p3",
+      "serial": "RM400-25061661"
+    },
+    {
+      "panel_id": "P25",
+      "row": "R3",
+      "column": 1,
+      "string_id": "S3",
+      "hub_id": "H09",
+      "hub_slot": "p1",
+      "serial": "RM400-25061668"
+    },
+    {
+      "panel_id": "P26",
+      "row": "R3",
+      "column": 2,
+      "string_id": "S3",
+      "hub_id": "H09",
+      "hub_slot": "p2",
+      "serial": "RM400-25061675"
+    },
+    {
+      "panel_id": "P27",
+      "row": "R3",
+      "column": 3,
+      "string_id": "S3",
+      "hub_id": "H09",
+      "hub_slot": "p3",
+      "serial": "RM400-25061682"
+    },
+    {
+      "panel_id": "P28",
+      "row": "R3",
+      "column": 4,
+      "string_id": "S3",
+      "hub_id": "H10",
+      "hub_slot": "p1",
+      "serial": "RM400-25061689"
+    },
+    {
+      "panel_id": "P29",
+      "row": "R3",
+      "column": 5,
+      "string_id": "S3",
+      "hub_id": "H10",
+      "hub_slot": "p2",
+      "serial": "RM400-25061696"
+    },
+    {
+      "panel_id": "P30",
+      "row": "R3",
+      "column": 6,
+      "string_id": "S3",
+      "hub_id": "H10",
+      "hub_slot": "p3",
+      "serial": "RM400-25061703"
+    },
+    {
+      "panel_id": "P31",
+      "row": "R3",
+      "column": 7,
+      "string_id": "S3",
+      "hub_id": "H11",
+      "hub_slot": "p1",
+      "serial": "RM400-25061710"
+    },
+    {
+      "panel_id": "P32",
+      "row": "R3",
+      "column": 8,
+      "string_id": "S3",
+      "hub_id": "H11",
+      "hub_slot": "p2",
+      "serial": "RM400-25061717"
+    },
+    {
+      "panel_id": "P33",
+      "row": "R3",
+      "column": 9,
+      "string_id": "S3",
+      "hub_id": "H11",
+      "hub_slot": "p3",
+      "serial": "RM400-25061724"
+    },
+    {
+      "panel_id": "P34",
+      "row": "R3",
+      "column": 10,
+      "string_id": "S3",
+      "hub_id": "H12",
+      "hub_slot": "p1",
+      "serial": "RM400-25061731"
+    },
+    {
+      "panel_id": "P35",
+      "row": "R3",
+      "column": 11,
+      "string_id": "S3",
+      "hub_id": "H12",
+      "hub_slot": "p2",
+      "serial": "RM400-25061738"
+    },
+    {
+      "panel_id": "P36",
+      "row": "R3",
+      "column": 12,
+      "string_id": "S3",
+      "hub_id": "H12",
+      "hub_slot": "p3",
+      "serial": "RM400-25061745"
+    }
+  ]
+}

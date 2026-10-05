@@ -1,0 +1,383 @@
+SOLARSCOPE MVP 1 SYSTEM OVERVIEW
+================================
+Version 2 (2026-10-04). Replaces version 1, kept as SYSTEM_OVERVIEW_v1_original.txt.
+Changes from v1: web stack moved to a later phase, result-file ownership defined,
+report windows derived from data, extra helper modules, scorecard, fixture-based
+parallel workflow, team plan.
+
+
+PURPOSE
+-------
+
+The SolarScope MVP analyzes one commercial rooftop solar site and explains every
+drop in panel output. It separates real equipment faults from weather, sensor
+problems, communication gaps, and invalid data.
+
+It answers four questions:
+
+1. Did production fall?
+2. Was the cause weather, bad data, a bad sensor, or equipment failure?
+3. How much energy was lost?
+4. Does a technician need to be dispatched?
+
+The whole workflow runs on a laptop with one command, from the input folder to
+saved result files and two finished PDF reports.
+
+
+MVP SUCCESS CRITERIA (from the brief)
+-------------------------------------
+
+- One command, input folder to finished PDFs, on a laptop.
+- Duplicates, gaps, missing and out-of-range values are flagged, never deleted.
+- A hub whose sensor drifts (the brief mentions after the January snowstorm) is
+  excluded automatically, so a bad sensor is never called a bad panel.
+- Every output drop gets a label. Snow, soiling, cloud, and heat are weather.
+  Hotspots, string outages, and wiring issues are faults. Classification reads the
+  voltage and current pattern, not just power.
+- Catch at least 5 of the 6 seeded faults with no more than 2 false dispatches.
+- Flag a slowly declining panel before it falls 10% behind its neighbors.
+- Every number in the reports comes from a saved result file.
+- Thresholds live in a config file, every step has tests, and a fresh dataset
+  runs with no code changes.
+
+
+DESIGN PRINCIPLES
+-----------------
+
+1. One analytics engine. Everything (CLI, tests, reports, scorecard) uses the same
+   functions. No business rule is written twice.
+2. Nothing site-specific in code. Hub count, panel mapping, ratings, valid ranges,
+   and sentinels come from site.json. Thresholds come from config/thresholds.yaml.
+   Report windows and event dates are found from the data, never typed in.
+3. Flag, never delete. Raw rows are preserved. Every excluded value carries a reason.
+4. Results first, reports second. All numbers are saved to the 5 result files
+   before any PDF is drawn. Report code formats; it does not calculate.
+5. The answer key never touches the pipeline. It is used only by scripts/score.py,
+   after the pipeline finishes, and is never committed to the repo.
+
+
+1. INPUTS
+---------
+
+One input folder containing:
+
+- readings.csv     15-minute hub readings: per-panel voltage, current, back-of-panel
+                   temperature (slots p1-p3), hub irradiance and humidity. UTC.
+- site.json        Location, timezone, layout, hub-to-panel mapping, module ratings,
+                   temperature coefficients, valid sensor ranges, sentinel values.
+- weather.csv      Daily NOAA GHCN weather by local calendar day.
+- service_log.csv  Truck rolls: trigger, finding, action, root cause, cost.
+
+Any folder with the same schemas must run without code changes.
+
+
+2. ONE-COMMAND WORKFLOW
+-----------------------
+
+    python run.py --input <input_folder> --output <output_folder> [--config config/thresholds.yaml]
+
+run.py validates the input, runs all stages, writes the 5 result files, renders
+both PDFs, and prints a success or failure summary. Outputs are written to a
+temporary folder and only replace the previous output when the whole run succeeds.
+
+Scoring is a separate command, run afterwards:
+
+    python scripts/score.py --results <output_folder> --answer-key <answer_key_folder>
+
+
+3. REPORT WINDOWS (derived, not hard-coded)
+-------------------------------------------
+
+end_date   = last complete local calendar day in readings.csv
+365-day    = the 365 days ending on end_date
+180-day    = the 180 days ending on end_date
+
+On the supplied dataset this gives 2025-09-01 to 2026-08-31 and 2026-03-05 to
+2026-08-31, matching the brief. The config may override start/end dates, but the
+default must work on a fresh dataset.
+
+Every result that appears in a report is available per window (see section 6).
+
+
+4. PIPELINE STAGES
+------------------
+
+Stage 1: Load and validate                          load.py, config.py
+- Read the 4 inputs and the config. Check columns, types, and that hub and panel
+  IDs in readings.csv match site.json. Fail with a clear message otherwise.
+- Convert UTC timestamps to the site timezone (DST aware).
+- Reshape p1/p2/p3 slots into long format with real panel IDs.
+- Compute report windows and input checksums.
+
+Stage 2: Clean and organize                         clean.py
+- Keep every raw record. Flag exact duplicates and conflicting duplicates
+  (same timestamp and hub, different values).
+- Flag missing values, sentinel values, and out-of-range values per column.
+- Detect missing 15-minute intervals and hub outages (gap logic in UTC).
+- Produce a canonical calculation dataset plus a reason for every excluded value.
+
+Stage 3: Data and sensor quality                    quality.py
+- Usable-data percentage per hub, per report window.
+- Detect communication outages and timestamp offsets.
+- Compare each hub's irradiance and humidity with hubs in the same row to find
+  drifting sensors (change point found from data) and stuck sensors.
+- Exclude the bad hub sensor only for the affected period, and substitute the
+  median irradiance of the other hubs in the same row so its panels still get an
+  expected value.
+- Panels on an excluded hub/period can never be dispatched because of that sensor.
+
+Stage 4: Expected production                        expected.py
+- Power = V x I. Energy per 15 minutes in kWh.
+- Physics baseline: P_exp = P_stc x (G / 1000) x (1 + gamma x (T - 25)) using
+  trusted irradiance and back-of-panel temperature, coefficients from site.json.
+- Peer baseline: each panel vs. the median of its healthy hub mates and its row,
+  normalized by its own ratio during a clean reference period.
+- Physics measures HOW MUCH was lost. Peer ratio shows WHO is affected (one panel,
+  a hub, a whole row/string, or the whole array). Both are needed: a row-wide
+  outage or array-wide snow shows no deficit against peers alone.
+- Skip low-irradiance intervals (threshold in config).
+
+Stage 4b: Slow decline                              decline.py
+- Rolling median of each panel's peer ratio (window in config).
+- Regression slope gives a decline rate in %/month.
+- Flag when slope and deficit cross config thresholds, before the panel is 10%
+  behind its neighbors. Record first-flag date and projected 10% date.
+- Ignore dips explained by snow, soiling, or an excluded sensor.
+
+Stage 5: Classify events                            classify.py, dispatch.py
+- Group consecutive abnormal intervals into events and set their scope.
+- Label each event using voltage, current, temperature, weather, scope, duration,
+  and peer behavior. Starting signatures (verify against the data in Phase 1):
+
+    String outage      every panel in one row: current ~0 at normal irradiance,
+                       voltage near open circuit
+    Wiring/connector   one panel drops to zero intermittently, normal otherwise
+    Hotspot / diode    voltage steps down about 1/3, current normal, panel hotter
+                       than hub mates
+    Snow               many panels low, SNWD > 0, cold; row 3 recovers last.
+                       Note: the hub reference cell can also be snow-covered, so
+                       use SNWD and ACSH, not irradiance alone, to tell snow from cloud
+    Soiling            slow current loss on many panels, resets after rain or cleaning
+    Heat               voltage loss matching the temperature coefficient
+    Cloud              irradiance also low, high ACSH; measured matches expected
+
+  Labels: weather, fault, sensor_issue, data_issue, early_warning, unresolved.
+- Turn decline.py flags into early_warning events.
+- dispatch.py: dispatch only faults still active at the end of the window, with
+  enough evidence. A repaired fault is history, not a dispatch.
+
+Stage 6: Results and reports                        servicelog.py, summary.py, report.py
+- servicelog.py: repeat repairs, and match no-fault visits to pipeline events to
+  count truck rolls avoided.
+- summary.py: build summary.json from the other result files and the service log.
+- report.py: render both PDFs from the saved result files only.
+
+
+5. MODULE MAP
+-------------
+
+The 6 brief stages are the core modules. Helper modules are allowed and used to
+keep each file focused and each owner independent.
+
+Module                     Stage  Owner     Purpose
+-------------------------  -----  --------  ------------------------------------------
+run.py                     all    Khang     One-command entry point, run ID, logging
+solarscope/config.py       1      Khang     Load config + site.json, config hash, windows
+solarscope/results.py      all    Khang     Result-file schemas, safe (atomic) writes
+solarscope/load.py         1      Khang     Read, validate, convert time, reshape
+solarscope/clean.py        2      Member 2  Flag duplicates, gaps, sentinels, ranges
+solarscope/quality.py      3      Member 2  Usable %, sensor drift/stuck, exclusion,
+                                            irradiance fallback
+solarscope/expected.py     4      Member 3  Energy, physics + peer baselines, losses
+solarscope/decline.py      4b     Member 3  Slow-decline detection
+solarscope/classify.py     5      Member 4  Event grouping and labels
+solarscope/dispatch.py     5      Member 4  Dispatch rules, fault vs. weather split
+solarscope/servicelog.py   6      Member 5  Repeat repairs, truck rolls avoided
+solarscope/summary.py      6      Member 5  Build summary.json
+solarscope/report.py       6      Member 5  Render the two PDFs
+scripts/score.py           after  Khang     Scorecard against the answer key
+
+
+6. FIVE OFFICIAL RESULT FILES
+-----------------------------
+
+Each file has one owner. Exact columns are fixed in docs/contracts.md.
+
+1. data_quality.csv                                  owner: quality.py
+   One row per hub per window: usable %, counts by flag type (duplicate,
+   conflict, missing, sentinel, out_of_range, gap), excluded sensor periods,
+   reasons.
+
+2. panel_daily.csv                                   owner: expected.py (+ columns
+   One row per panel per local day: measured kWh,     from decline.py and one
+   expected kWh, loss kWh, peer ratio, rolling        label column from classify.py)
+   peer ratio, decline slope, daily label.
+
+3. events.csv                                        owner: classify.py
+   Every grouped event: start, end, scope, panels, label, cause, evidence,
+   kWh lost, status, including early_warning rows (first-flag date, decline
+   rate, current deficit, projected 10% date).
+
+4. dispatch.csv                                      owner: dispatch.py
+   Active panels needing a truck per window: priority, cause, evidence, kWh lost,
+   recommended action.
+
+5. summary.json                                      owner: summary.py
+   run ID, config hash, input checksums, and one block per window with: actual
+   kWh, kWh lost split into fault and weather, dispatch and warning counts,
+   top 3 findings, repeat_repairs table, truck_rolls_avoided, and paths to the
+   other 4 files.
+
+
+7. TWO PDF REPORTS
+------------------
+
+One report per window (180-day and 365-day), 6 pages each, every number read from
+the result files:
+
+1. Summary            total kWh lost (fault vs. weather), counts, top 3 findings
+2. Fault or Weather   every event, its label, and the kWh it cost
+3. Dispatch List      each panel that needs a truck, likely cause, evidence
+4. Repeat Repairs     panels fixed more than once, root cause, permanent fix
+5. Early Warnings     panels in slow decline, rate, first flag, projected 10% date
+6. Data Quality and   usable % for all hubs, excluded hubs/periods, rules used,
+   Method             run ID, config hash, input checksums
+
+Reports never include raw readings, debug logs, or answer-key information.
+
+
+8. CONFIGURATION
+----------------
+
+config/thresholds.yaml holds every threshold: valid ranges and sentinels (copied
+from or pointing to site.json, site.json wins if both exist), duplicate and gap
+rules, minimum irradiance, peer selection, drift/stuck detection, hotspot, wiring,
+string-outage and decline thresholds, event grouping, dispatch rules, and report
+window settings. The config hash is saved in summary.json so every result can be
+reproduced. Tuning in Phase 3 changes the config only, never code.
+
+
+9. SCORECARD
+------------
+
+scripts/score.py compares dispatch.csv, events.csv and summary.json with the answer
+key and reports: faults caught (target >= 5 of 6), false dispatches (target <= 2),
+truck rolls avoided, and days of early warning. It is run once, after thresholds
+are frozen. Thresholds are not tuned against the answer key, because SolarScope
+reruns the pipeline on a fresh dataset.
+
+
+10. TESTING
+-----------
+
+- Unit tests for every module, written by its owner.
+- Fixture dataset in tests/fixtures/ (small, hand-made, with edge cases:
+  duplicate, conflict, sentinel, out-of-range, gap, DST day).
+- DST tests: fall-back day has 100 intervals, spring-forward day has 92.
+- Hand-calculation test: expected output within 2% of a spreadsheet calculation.
+- Signature tests: one fixture case per event label.
+- Integration test: fixture input folder to the 5 result files and 2 PDFs.
+- Report tests: 2 PDFs, exactly 6 readable pages, key numbers match result files.
+- Full-dataset regression run before the walkthrough.
+
+
+11. PROJECT STRUCTURE
+---------------------
+
+SolarScope/
+|-- run.py
+|-- solarscope/
+|   |-- config.py   results.py   load.py
+|   |-- clean.py    quality.py
+|   |-- expected.py decline.py
+|   |-- classify.py dispatch.py
+|   `-- servicelog.py summary.py report.py
+|-- scripts/
+|   `-- score.py
+|-- config/
+|   `-- thresholds.yaml
+|-- docs/
+|   |-- contracts.md
+|   `-- flowsheet (diagram matching the code)
+|-- tests/
+|   `-- fixtures/
+|-- input/            (not committed if large)
+|-- output/           (not committed)
+|-- requirements.txt
+`-- README.md
+
+The answer key folder stays outside the repo and is listed in .gitignore. Only the
+lead keeps a copy.
+
+
+12. TECHNOLOGY
+--------------
+
+Python 3.11+, pandas, NumPy, PyYAML, a PDF library (e.g. reportlab or matplotlib
+PdfPages), pytest, a formatter and linter in CI. No database, server, or frontend
+in MVP 1.
+
+
+13. RELIABILITY AND LOGGING
+---------------------------
+
+- Structured logs with the run ID on every stage: start, end, duration, failures.
+- Partial results are never presented as successful.
+- Previous successful outputs are kept until a new run succeeds.
+- Report rendering can be retried from saved results without recalculating.
+- Logs never contain the full raw dataset or answer-key content.
+
+
+14. TEAM AND WORKFLOW
+---------------------
+
+Workstreams (Linear label = owner):
+
+  INT  Lead / Integration  Khang     run.py, config.py, results.py, load.py,
+                                     contracts, score.py, README, flowsheet
+  DQ   Data Quality        Member 2  clean.py, quality.py
+  EXP  Expected Output     Member 3  expected.py, decline.py
+  CLS  Classification      Member 4  classify.py, dispatch.py
+  RPT  Reports             Member 5  servicelog.py, summary.py, report.py
+                                     (also helps review events in Phase 3)
+
+No-waiting rule: stage contracts (docs/contracts.md) are agreed on day 1. Each
+person builds against fixture files in the agreed format, not against a
+teammate's unfinished code. Khang makes the raw and loaded fixtures; each owner
+hand-writes the fixture for their own stage output on day 2-3, while doing their
+Phase 1 exploration work.
+
+Phase 1 Setup (days 1-3): contracts, config, raw/loaded fixtures, quick load.py.
+  Others: data profiling (DQ), formula + hand calculation on real sample rows
+  (EXP), V/I signature catalog from service-log dates (CLS), PDF layout and
+  service-log parsing (RPT).
+
+Phase 2 Build (weeks 1-3): everyone builds their modules in parallel. Hand-offs:
+  - quick load.py by day 2 -> clean.py switches from fixture to real data
+  - expected.py v1 by end of week 1 (runs on load.py output with naive cleaning,
+    so it does not wait for clean/quality) -> classify.py tests on real numbers
+
+Phase 3 Integrate and tune (week 4): full-dataset run, sensor fallback, decline,
+  threshold tuning in config only, one scoring run, README, flowsheet,
+  walkthrough rehearsal on a fresh copy of the data.
+
+If blocked: write tests, add fixture edge cases, or review a teammate's PR.
+
+
+15. OUT OF SCOPE FOR MVP 1
+--------------------------
+
+- Backend API, database, and browser dashboard (planned for MVP 1.5: a thin
+  layer, e.g. Streamlit reading the result files, SQLite if storage is needed)
+- Live telemetry, multiple sites or customers, user accounts, SSO
+- Notifications, technician scheduling, work orders, inventory
+- Machine-learning model training
+- Docker, microservices, cloud deployment
+
+
+16. MAIN PRINCIPLE
+------------------
+
+One independent, reproducible analytics engine that explains the supplied dataset,
+runs unchanged on a fresh one, and produces traceable results and reports with one
+command. Anything else is a thin layer on top, added only after MVP 1 is done.

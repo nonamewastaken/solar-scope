@@ -19,3 +19,14 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# SolarScope: never commit the answer key or run outputs. The repo is PUBLIC.
+SolarScope_MVP1_AnswerKey_INTERNAL/
+answer_key/
+output/
+# input/: only the supplied synthetic dataset (input/mvp1) is committed; drop other datasets here locally
+input/*
+!input/.gitkeep
+!input/mvp1/
+.pytest_cache/
+.ruff_cache/
