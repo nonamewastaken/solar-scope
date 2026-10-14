@@ -4,8 +4,8 @@ See docs/contracts.md §4. Steps:
 
 Q1 hub_sensors        one value per hub and interval for each hub-level sensor
 Q2 find_stuck         identical-value runs (any hub sensor), and humidity far from its row
-Q3 find_drift         irradiance ratio to the trusted hubs in the row, against the hub's
-                      own normal ratio; the start is moved back to the change point
+Q3 find_drift         irradiance ratio to the trusted hubs in the row outside ±10% on a
+                      7-day median (option 2B: the contract rule as first written)
                       (Q2 and Q3 repeat with the hubs found so far left out of the peer
                       medians, so one bad sensor cannot make its neighbours look bad)
 Q4 apply_exclusions   reason sensor_drift / sensor_stuck, sensor_excluded
@@ -14,7 +14,6 @@ Q6 comm_outages       gaps of at least quality.comm_outage_min_intervals
 Q7 data_quality       one row per hub per window (data_quality.csv)
 """
 
-import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -242,69 +241,36 @@ def daily_ratio(raw: pd.DataFrame, trusted: pd.DataFrame, rows: pd.Series, hub: 
 
 
 def find_drift(raw: pd.DataFrame, trusted: pd.DataFrame, rows: pd.Series, cfg) -> pd.DataFrame:
-    """Irradiance drift: the hub's ratio to its row, divided by the hub's own normal ratio
-    (its first `baseline_days` days), stays outside 1 ± ratio_tolerance on a
-    `rolling_days` rolling median for `min_days` days."""
+    """Irradiance drift as the contract config first had it (option 2B): the hub's raw
+    ratio to its row median, on a `rolling_days` rolling median, outside
+    1 ± ratio_tolerance for `min_days` days. The period starts on the day the rule
+    fires and ends the day after it last fires."""
     d = cfg.thresholds["quality"]["drift"]
     out = []
     for h in raw.columns:
         ratio = daily_ratio(raw, trusted, rows, h, cfg)
-        if len(ratio) < d["baseline_days"]:
+        if ratio.empty:
             continue
-        base = ratio.iloc[: d["baseline_days"]].median()
-        dev = ratio / base - 1
+        dev = ratio - 1
         rolling = dev.rolling(f"{d['rolling_days']}D", min_periods=d["min_days"]).median()
         hit = rolling.abs().gt(d["ratio_tolerance"]).where(rolling.notna())
-        prev_end = dev.index[0]
         for trig, last in day_runs(hit, d["min_days"]):
-            start = trig
-            if d["start"] == "change_point":
-                cp = change_point(dev.loc[prev_end:last], d["min_segment_days"])
-                start = min(cp, trig) if cp is not None else trig
-            over = dev.loc[start:last].abs().gt(d["ratio_tolerance"])
-            end_day = over.index[over][-1] if over.any() else last
             ongoing = last >= ratio.index[-1]
-            peak = dev.loc[start:last]
+            peak = rolling.loc[trig:last]
             peak = peak.loc[peak.abs().idxmax()]
             out.append(
                 {
                     "hub_id": h,
                     "sensor": "irradiance_wm2",
                     "kind": "drift",
-                    "start_utc": day_start_utc(start, cfg),
-                    "end_utc": pd.NaT if ongoing else day_start_utc(end_day + DAY, cfg),
-                    "evidence": f"ratio to row {base * (1 + peak):.3f} vs own normal "
-                    f"{base:.3f} ({peak:+.0%}); over ±{d['ratio_tolerance']:.0%} from "
-                    f"{trig.date()}, change point {start.date()}",
+                    "start_utc": day_start_utc(trig, cfg),
+                    "end_utc": pd.NaT if ongoing else day_start_utc(last + DAY, cfg),
+                    "evidence": f"ratio to row {1 + peak:.3f} (rolling {d['rolling_days']} d), "
+                    f"over ±{d['ratio_tolerance']:.0%} from {trig.date()}",
                     "severity": abs(peak) / d["ratio_tolerance"],
                 }
             )
-            prev_end = last
     return pd.DataFrame(out, columns=[*PERIOD_COLUMNS, "severity"]) if out else empty_periods()
-
-
-def change_point(y: pd.Series, min_seg: int) -> pd.Timestamp | None:
-    """Day where a flat line turns into a free line (step and/or slope), by least squares.
-
-    Fits y = a before the change and y = b + c*t from it on, for every split with at
-    least min_seg days on each side, and returns the split with the smallest error.
-    """
-    y = y.dropna()
-    n = len(y)
-    if n < 2 * min_seg:
-        return None
-    t = (y.index - y.index[0]).days.to_numpy(dtype=float)
-    v = y.to_numpy(dtype=float)
-    best, best_k = math.inf, None
-    for k in range(min_seg, n - min_seg + 1):
-        left = v[:k]
-        sse = ((left - left.mean()) ** 2).sum()
-        tr, vr = t[k:], v[k:]
-        slope, icpt = np.polyfit(tr, vr, 1)
-        sse += ((vr - (icpt + slope * tr)) ** 2).sum()
-        if sse < best:
-            best, best_k = sse, k
-    return y.index[best_k]
 
 
 def merge_periods(p: pd.DataFrame, gap: pd.Timedelta) -> pd.DataFrame:

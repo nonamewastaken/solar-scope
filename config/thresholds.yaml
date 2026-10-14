@@ -37,12 +37,9 @@ quality:                        # owner: DQ
   drift:
     min_irradiance_wm2: 200     # compare sensors only in daylight
     min_intervals_per_day: 8    # daylight intervals needed for a daily ratio
-    baseline_days: 30           # the hub's first days with a ratio = its own normal ratio to the row
-    ratio_tolerance: 0.05       # rolling ratio / own normal ratio outside 1 +- this = drifting
+    ratio_tolerance: 0.10       # hub / row median outside 1 +- this = drifting
     min_days: 3                 # sustained this long before excluding
     rolling_days: 7
-    start: change_point         # change_point = move the start back to where the ratio began to move
-    min_segment_days: 7         # the change point needs this many days on each side
   stuck:
     min_intervals: 16           # identical value this many intervals in a row
     skip_values: [0.0]          # identical runs at these values are normal (irradiance at night)

@@ -90,17 +90,18 @@ def test_healthy_hubs_are_not_excluded(tmp_path):
 # synthetic: drift -------------------------------------------------------------------------
 
 
-def test_slow_drift_is_found_and_dated_from_its_change_point(tmp_path):
+def test_slow_drift_is_found_once_it_passes_10_pct(tmp_path):
     edit = scale("H03", "2026-04-10", None, lambda d: 1 + 0.04 * d / 30)  # +4 % a month
     cfg, inputs = synth.make_input(tmp_path, days=120, edit=edit)
     q = run(cfg, inputs)
     p = q.sensor_periods
     assert len(p) == 1 and p.iloc[0].hub_id == "H03" and p.iloc[0].kind == "drift"
-    assert abs(p.iloc[0].start_utc - day("2026-04-10")) <= pd.Timedelta(days=7)
+    # option 2B starts when the rule fires: +4 %/month passes 10 % after ~75 days
+    assert day("2026-06-20") <= p.iloc[0].start_utc <= day("2026-07-05")
     assert pd.isna(p.iloc[0].end_utc)
 
     c = q.canonical
-    late = c[(c.hub_id == "H03") & (c.timestamp_utc >= day("2026-06-01"))]
+    late = c[(c.hub_id == "H03") & (c.timestamp_utc >= day("2026-07-05"))]
     assert late.sensor_excluded.all() and late.irradiance_wm2_reason.eq("sensor_drift").all()
     assert late.irradiance_source.eq("row_median").all()
     others = c[c.hub_id != "H03"]
@@ -112,8 +113,9 @@ def test_step_drift_that_recovers_has_an_end(tmp_path):
     cfg, inputs = synth.make_input(tmp_path, days=90, edit=edit)
     p = run(cfg, inputs).sensor_periods
     assert len(p) == 1 and p.iloc[0].hub_id == "H02"
-    assert abs(p.iloc[0].start_utc - day("2026-04-20")) <= pd.Timedelta(days=2)
-    assert abs(p.iloc[0].end_utc - day("2026-05-10")) <= pd.Timedelta(days=2)
+    # the rolling median needs a few days to cross the line, both ways
+    assert abs(p.iloc[0].start_utc - day("2026-04-20")) <= pd.Timedelta(days=4)
+    assert abs(p.iloc[0].end_utc - day("2026-05-10")) <= pd.Timedelta(days=4)
 
 
 def test_a_bad_peer_does_not_make_its_neighbours_look_bad(tmp_path):
