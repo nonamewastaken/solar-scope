@@ -31,7 +31,7 @@ teammate's unfinished code.
 | --- | --- | --- |
 | `""` | | Usable |
 | `missing` | clean | Blank in the raw file |
-| `sentinel` | clean | Equals a `cfg.thresholds.validation.sentinel_values` key. Takes precedence over `out_of_range`. |
+| `sentinel` | clean | Equals a `cfg.thresholds.validation.sentinel_values` key that applies to this measure (`validation.sentinel_measures` scopes a sentinel to its measures; an unlisted sentinel applies to all). Takes precedence over `out_of_range`. |
 | `out_of_range` | clean | Outside `cfg.thresholds.validation.valid_ranges[measure]`, inclusive bounds |
 | `conflict` | clean | Duplicate records for the same `(timestamp_utc, hub_id)` disagree on this value |
 | `gap` | clean | No record for this interval |
@@ -122,6 +122,11 @@ supplied dataset this gives `365d` = 2025-09-01..2026-08-31 and `180d` =
 | `is_conflict` | bool | Shares `timestamp_utc, hub_id` with another record that has different values |
 | `is_kept` | bool | The one record per `(timestamp_utc, hub_id)` that feeds `canonical` |
 | `<measure>_flag` | str | One per measure, using the reason vocabulary. Blank means OK. |
+| `timestamp_raw_utc` | datetime64[us, UTC] | The timestamp as written in the file |
+| `clock_offset_min` | int64 | Label minus true time for a record in a `clock_offsets` period, else 0. `timestamp_utc`, `timestamp_local` and `local_date` hold the corrected time. |
+
+Clock offsets are fixed before the duplicate and gap logic, because a clock that jumps
+writes some timestamps twice (fake conflicts) and others never (fake gaps).
 
 ### `cleaned.canonical`: the calculation dataset
 
@@ -144,6 +149,12 @@ Sorted by `timestamp_utc, panel_id`.
 
 `hub_id, start_utc, end_utc, n_intervals`. One row per run of consecutive missing
 intervals. `end_utc` is exclusive.
+
+### `cleaned.clock_offsets`
+
+`hub_id, start_utc, end_utc, offset_min, n_records, evidence`. One row per period in
+which a hub clock ran a whole multiple of `clean.clock_offset.step_min` off its row.
+Times are true (corrected) UTC, and `end_utc` is exclusive.
 
 ## 4. Stage 3: quality (`quality.py`, owner Member 2)
 
