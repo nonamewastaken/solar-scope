@@ -4,9 +4,10 @@ See docs/contracts.md §3. Flag, never delete: every raw row survives in `flags`
 Steps, in order (each one needs the one before it):
 
 C1 flag_values        missing, then sentinel, then out_of_range, per measure
-C2 fix_clock_offsets  find hubs whose clock ran a whole number of hours off and move
-                      their records back to the true time (before C3, because an
-                      offset is what creates fake conflicts and gaps)
+C2 fix_clock_offsets  find hubs whose clock ran a whole number of hours off and
+                      exclude those records (option 1B: reason `clock_offset`, the
+                      label is not trusted, so nothing is moved). Before C3, so the
+                      excluded copies do not count as conflicts.
 C3 flag_duplicates    exact duplicates, conflicting duplicates, the record kept per key
 C4 build_canonical    one row per (timestamp_utc, panel_id) on the full grid
 C5 find_gaps          runs of intervals with no record, per hub
@@ -82,10 +83,11 @@ def flag_values(readings: pd.DataFrame, cfg: Config) -> pd.DataFrame:
 
 
 def fix_clock_offsets(flags: pd.DataFrame, cfg: Config) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Find clock-offset periods and move those records back to the true time.
+    """Find clock-offset periods and exclude those records (option 1B).
 
-    Adds `timestamp_raw_utc` (the label as written) and `clock_offset_min` (label minus
-    true time, 0 when the clock was right), then fixes timestamp_utc/_local/local_date.
+    Adds `timestamp_raw_utc` (equal to timestamp_utc: nothing is moved) and
+    `clock_offset_min` (the offset found, 0 when the clock was right). Every measure of
+    a record in an offset period gets reason `clock_offset`.
     """
     out = flags.copy()
     out["timestamp_raw_utc"] = out["timestamp_utc"]
@@ -94,11 +96,8 @@ def fix_clock_offsets(flags: pd.DataFrame, cfg: Config) -> tuple[pd.DataFrame, p
     for p in periods:
         hit = out["raw_row"].isin(p["raw_rows"])
         out.loc[hit, "clock_offset_min"] = p["offset_min"]
-    shift = pd.to_timedelta(out["clock_offset_min"], unit="min")
-    out["timestamp_utc"] = (out["timestamp_raw_utc"] - shift).dt.as_unit("us")
-    out["timestamp_local"] = out["timestamp_utc"].dt.tz_convert(cfg.tz)
-    out["local_date"] = out["timestamp_local"].dt.tz_localize(None).dt.normalize()
-    out = out.sort_values(["timestamp_utc", "hub_id", "raw_row", "slot"]).reset_index(drop=True)
+        for m in MEASURES:
+            out.loc[hit, f"{m}_flag"] = "clock_offset"
     table = pd.DataFrame(
         [{c: p[c] for c in OFFSET_COLUMNS} for p in periods], columns=OFFSET_COLUMNS
     )
@@ -287,14 +286,18 @@ def flag_duplicates(flags: pd.DataFrame) -> pd.DataFrame:
     Conflict: the key has records with different values. Each measure the records
     disagree on gets reason `conflict` on all of them (unless already flagged), so its
     canonical value is NaN (`clean.conflict_keep: none`).
-    Kept: the earliest-received record per key.
+    Kept: the earliest-received record per key, preferring a record whose clock was right.
+    Records excluded for a clock offset never count as conflicts (they are not trusted
+    to belong to that timestamp at all).
     """
     out = flags.copy()
-    rec = hub_records(out).sort_values("raw_row")
+    rec = hub_records(out).assign(bad=out["clock_offset_min"].ne(0)).sort_values("raw_row")
     rec = rec.assign(sig=_record_signature(out, rec["raw_row"]).to_numpy())
     rec["is_duplicate"] = rec.duplicated([*KEY, "sig"], keep="first")
-    rec["is_conflict"] = rec.groupby(KEY)["sig"].transform("nunique").gt(1)
-    rec["is_kept"] = ~rec.duplicated(KEY, keep="first")
+    good = rec[~rec["bad"]]
+    conflict = good.groupby(KEY)["sig"].transform("nunique").gt(1)
+    rec["is_conflict"] = conflict.reindex(rec.index, fill_value=False)
+    rec["is_kept"] = ~rec.sort_values(["bad", "raw_row"]).duplicated(KEY, keep="first")
     per_raw = rec.set_index("raw_row")[["is_duplicate", "is_conflict", "is_kept"]]
     for col in per_raw.columns:
         out[col] = out["raw_row"].map(per_raw[col]).astype(bool)

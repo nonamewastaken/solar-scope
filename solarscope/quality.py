@@ -496,7 +496,8 @@ def reasons_text(row, hp, outages, offsets, lo_utc, hi_utc, cfg) -> str:
     for o in offsets[offsets.hub_id == hub].itertuples():
         if o.start_utc < hi_utc and o.end_utc > lo_utc:
             parts.append(
-                f"clock {o.offset_min:+d} min fixed {o.start_utc.date()} to {o.end_utc.date()}"
+                f"clock {o.offset_min:+d} min, records excluded {o.start_utc.date()} to "
+                f"{o.end_utc.date()}"
             )
     ho = outages[
         (outages.hub_id == hub) & (outages.start_utc < hi_utc) & (outages.end_utc > lo_utc)

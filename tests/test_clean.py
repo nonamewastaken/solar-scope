@@ -141,7 +141,7 @@ def test_no_clock_offset_on_the_fixture(cleaned):
 
 
 @pytest.mark.parametrize("offset", [-240, -180, 120])
-def test_clock_offset_is_found_and_moved_back(tmp_path, offset):
+def test_clock_offset_is_found_and_excluded(tmp_path, offset):
     def edit(w):
         return synth.shift_clock(w, "H02", "2026-03-04", "2026-03-07", offset, TZ)
 
@@ -157,17 +157,18 @@ def test_clock_offset_is_found_and_moved_back(tmp_path, offset):
 
     f = out.flags
     assert not f.is_conflict.any() and not f.is_duplicate.any()
-    assert out.gaps.empty  # the hole left by the jump is filled again
-    shifted = f[f.clock_offset_min != 0]
-    assert (
-        (shifted.timestamp_raw_utc - shifted.timestamp_utc).eq(pd.Timedelta(minutes=offset)).all()
-    )
+    assert f.timestamp_raw_utc.equals(f.timestamp_utc)  # nothing is moved
+    bad = f[f.clock_offset_min != 0]
+    assert len(bad) == 3 * 96 * 3
+    for m in clean.MEASURES:
+        assert bad[f"{m}_flag"].eq("clock_offset").all()
 
-    # H02 now lines up with its neighbours again
-    c = out.canonical.drop_duplicates(["timestamp_utc", "hub_id"])
-    wide = c.pivot(index="timestamp_utc", columns="hub_id", values="irradiance_wm2")
-    day = wide.loc[ts("2026-03-05T13:00Z") : ts("2026-03-05T21:00Z")]
-    assert (day["H02"] / day["H01"]).between(0.9, 1.1).all()
+    # the hole the jump left stays a gap, and every kept H02 value in the period is NaN
+    assert out.gaps.n_intervals.sum() == abs(offset) // 15
+    c = out.canonical
+    h02 = c[(c.hub_id == "H02") & c.raw_row.isin(bad.raw_row)]
+    assert h02.irradiance_wm2.isna().all()
+    assert h02.irradiance_wm2_reason.eq("clock_offset").all()
 
 
 def test_healthy_hubs_have_no_clock_offset(tmp_path):

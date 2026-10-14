@@ -35,6 +35,7 @@ teammate's unfinished code.
 | `out_of_range` | clean | Outside `cfg.thresholds.validation.valid_ranges[measure]`, inclusive bounds |
 | `conflict` | clean | Duplicate records for the same `(timestamp_utc, hub_id)` disagree on this value |
 | `gap` | clean | No record for this interval |
+| `clock_offset` | clean | The record was written while the hub clock was off (`cleaned.clock_offsets`), so its timestamp is not trusted. Every measure of the record. |
 | `sensor_drift` / `sensor_stuck` | quality | Hub sensor excluded for this period. Hub-level measures only. |
 
 ## 1. Pipeline wiring (`run.py`)
@@ -123,10 +124,10 @@ supplied dataset this gives `365d` = 2025-09-01..2026-08-31 and `180d` =
 | `is_kept` | bool | The one record per `(timestamp_utc, hub_id)` that feeds `canonical` |
 | `<measure>_flag` | str | One per measure, using the reason vocabulary. Blank means OK. |
 | `timestamp_raw_utc` | datetime64[us, UTC] | The timestamp as written in the file |
-| `clock_offset_min` | int64 | Label minus true time for a record in a `clock_offsets` period, else 0. `timestamp_utc`, `timestamp_local` and `local_date` hold the corrected time. |
+| `clock_offset_min` | int64 | The offset found for a record in a `clock_offsets` period, else 0. The record keeps its label and every measure gets reason `clock_offset`. |
 
-Clock offsets are fixed before the duplicate and gap logic, because a clock that jumps
-writes some timestamps twice (fake conflicts) and others never (fake gaps).
+Clock offsets are found before the duplicate logic, because a clock that jumps writes
+some timestamps twice (fake conflicts). Excluded records never count as conflicts.
 
 ### `cleaned.canonical`: the calculation dataset
 
