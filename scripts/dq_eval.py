@@ -111,6 +111,10 @@ def l2(cleaned, qual, inputs, windows, cfg) -> dict:
             }  # fmt: skip
             for w, g in dq.groupby("window")
         },
+        "usable_pct_by_hub": {
+            w: g.set_index("hub_id")["usable_pct"].round(2).to_dict()
+            for w, g in dq.groupby("window")
+        },
         "proxies": proxies(qual, inputs, windows, cfg),
     }
 
@@ -163,6 +167,7 @@ def l3(truth: dict, cleaned, qual, cfg) -> dict:
         if i not in matched_o and (o.hub_id, None, "clock_offset") not in known:
             false_alarms.append(f"{o.hub_id} clock {o.offset_min:+d} {local_date(o.start_utc, tz)}")
 
+    fallback = fallback_error(truth, qual, cfg)
     f = cleaned.flags.set_index(["raw_row", "slot"])
     cases = []
     for case in truth["value_cases"]:
@@ -175,7 +180,40 @@ def l3(truth: dict, cleaned, qual, cfg) -> dict:
         "n_faults": len(results),
         "false_alarms": false_alarms,
         "value_cases": {k: f"{int(v['sum'])}/{int(v['size'])}" for k, v in by_id.iterrows()},
+        "fallback": fallback,
     }
+
+
+def fallback_error(truth: dict, qual, cfg) -> list[dict]:
+    """For each planted drift: how far irradiance_used_wm2 is from the true irradiance
+    (the source file before planting), over the planted period, daylight (true >= 200)."""
+    cols = ["timestamp_utc", "hub_id", "irradiance_wm2"]
+    src = pd.read_csv(Path(truth["source"]) / "readings.csv", dtype={"hub_id": "str"}, usecols=cols)
+    src["timestamp_utc"] = pd.to_datetime(src["timestamp_utc"], utc=True)
+    src = src.drop_duplicates(["timestamp_utc", "hub_id"]).set_index(["timestamp_utc", "hub_id"])
+    used = qual.canonical.drop_duplicates(["timestamp_utc", "hub_id"])
+    used = used.set_index(["timestamp_utc", "hub_id"])[["irradiance_used_wm2", "irradiance_source"]]
+    out = []
+    for fault in truth["faults"]:
+        if fault["kind"] != "drift":
+            continue
+        lo = pd.Timestamp(fault["start_local"]).tz_localize(cfg.tz)
+        hi = pd.Timestamp(fault["end_local"] or "2100-01-01").tz_localize(cfg.tz)
+        u = used.xs(fault["hub_id"], level="hub_id")
+        t = src.xs(fault["hub_id"], level="hub_id")["irradiance_wm2"]
+        d = u.join(t.rename("true"), how="inner")
+        d = d[(d.index >= lo) & (d.index < hi) & d["true"].ge(200)]
+        err = (d["irradiance_used_wm2"] / d["true"] - 1).dropna()
+        out.append(
+            {
+                "id": fault["id"],
+                "hub_id": fault["hub_id"],
+                "median_abs_err_pct": round(float(err.abs().median() * 100), 2),
+                "mean_err_pct": round(float(err.mean() * 100), 2),
+                "sources": d["irradiance_source"].value_counts().to_dict(),
+            }
+        )
+    return out
 
 
 def main() -> None:

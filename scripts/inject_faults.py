@@ -115,6 +115,7 @@ def main() -> None:
     r[cols].to_csv(args.output / "readings.csv", index=False)
 
     truth = {
+        "source": str(args.input.resolve()),
         "faults": faults,
         "value_cases": cases,
         # found while profiling the source data (docs/data_profile.md), not planted

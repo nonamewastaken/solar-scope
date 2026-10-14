@@ -60,16 +60,22 @@ def row(branch: str, real: dict, inj: dict) -> dict:
     drift = first(r2["sensor_periods"], hub_id="H09", sensor="irradiance_wm2")
     hum = first(r2["sensor_periods"], hub_id="H09", sensor="humidity_pct")
     errs = [abs(f["start_err_days"]) for f in i3["faults"] if f["found"]]
+    fb = {f["id"]: f for f in i3.get("fallback", [])}
+    lf = {f["id"]: f for f in i3["faults"]}
     return {
         "branch": branch,
         "P1 H02 clock": f"{h02.get('offset_min', 'none')} {h02.get('start', '')}".strip(),
         "P1 conflicts": r2["n_conflict_records"],
         "P1 H02 Apr abnormal": px["abnormal_by_hub_month"].get("H02", {}).get("2026-04", 0),
-        "P1 H02 usable rows": r2["reasons"]["voltage_v"].get("", 0),
+        "P1 H02 usable % 365d": r2["usable_pct_by_hub"]["365d"].get("H02"),
         "P2 H09 drift from": drift.get("start", "none"),
         "P2 H09 loss 180d kWh": px["180d"]["loss_kwh_by_hub"].get("H09"),
         "P2 site loss 180d kWh": px["180d"]["loss_kwh"],
+        "P2 F2 slow drift late d": lf["F2"].get("start_err_days"),
+        "P2 F2 used err %": fb.get("F2", {}).get("median_abs_err_pct"),
+        "P2 F3 step used err %": fb.get("F3", {}).get("median_abs_err_pct"),
         "P3 H09 humidity from": hum.get("start", "none"),
+        "P3 F5 late d": lf["F5"].get("start_err_days"),
         "P4 S1 temp 327.6": i3["value_cases"].get("S1"),
         "P4 S2 irr 655.35 real": i3["value_cases"].get("S2"),
         "P4 S3 irr 327.6 night": i3["value_cases"].get("S3"),
