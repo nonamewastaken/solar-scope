@@ -162,14 +162,18 @@ Times are true (corrected) UTC, and `end_utc` is exclusive.
 
 | Field | Contents |
 | --- | --- |
-| `canonical` | `cleaned.canonical`, plus `irradiance_used_wm2` (float64), `irradiance_source` (str: `hub`, `row_median` or `none`), and `sensor_excluded` (bool). For an excluded hub sensor, the `<measure>_reason` columns are set to `sensor_drift` or `sensor_stuck`. |
-| `sensor_periods` | `hub_id, sensor, kind (drift/stuck), start_utc, end_utc, evidence`. `end_utc` is exclusive, and NaT means "until the end of the data". |
+| `canonical` | `cleaned.canonical`, plus `irradiance_used_wm2` (float64), `irradiance_source` (str: `hub`, `row_median` or `none`), and `sensor_excluded` (bool: the hub's irradiance sensor, the one that feeds expected output, is excluded at this interval). For an excluded hub sensor, the `<measure>_reason` columns are set to `sensor_drift` or `sensor_stuck` (a value already flagged keeps its first reason). |
+| `sensor_periods` | `hub_id, sensor, kind (drift/stuck), start_utc, end_utc, evidence`. `sensor` is the measure name (`irradiance_wm2`, `humidity_pct`). `end_utc` is exclusive, and NaT means "until the end of the data". |
 | `comm_outages` | `hub_id, start_utc, end_utc, n_intervals`, for gaps of at least `quality.comm_outage_min_intervals` |
 | `data_quality` | The `data_quality.csv` frame (section 9.1) |
 
 `irradiance_used_wm2` is the hub's own value when it is trusted. Otherwise it is
-the median of the trusted hubs in the same row at that interval. If neither exists,
-it is NaN with source `none`.
+the median of the trusted hubs in the same row at that interval (at least
+`quality.fallback_min_hubs`). If neither exists, it is NaN with source `none`.
+
+`quality.is_usable(canonical)` is the one definition of a usable panel-interval
+(V, I and T usable, and `irradiance_source != none`). `data_quality.usable_pct` uses
+it, and `expected.py` should use it for `is_usable`, so the rule is written once.
 
 ## 5. Stage 4: expected (`expected.py`, owner Member 3)
 
