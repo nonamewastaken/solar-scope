@@ -3,7 +3,9 @@
 See docs/contracts.md §3. Flag, never delete: every raw row survives in `flags`.
 Steps, in order (each one needs the one before it):
 
-C1 flag_values        missing, then sentinel, then out_of_range, per measure
+C1 flag_values        missing, then sentinel, then out_of_range, per measure (option 4B:
+                      a sentinel inside the valid range must also disagree with its
+                      neighbours)
 C2 fix_clock_offsets  find hubs whose clock ran a whole number of hours off and move
                       their records back to the true time (before C3, because an
                       offset is what creates fake conflicts and gaps)
@@ -46,36 +48,60 @@ def clean(inputs: Inputs, cfg: Config) -> Cleaned:
 # C1 -------------------------------------------------------------------------------------
 
 
-def sentinels_for(measure: str, cfg: Config) -> list[float]:
-    """Sentinel values that apply to this measure.
-
-    `validation.sentinel_measures` scopes a sentinel to the measures it belongs to (327.6
-    is a thermistor short, so only temp_c). A sentinel it does not list applies to every
-    measure.
-    """
-    v = cfg.thresholds["validation"]
-    scope = {float(k): ms for k, ms in (v.get("sentinel_measures") or {}).items()}
-    values = [float(k) for k in v["sentinel_values"]]
-    return [s for s in values if s not in scope or measure in scope[s]]
-
-
 def flag_values(readings: pd.DataFrame, cfg: Config) -> pd.DataFrame:
-    """Add `<measure>_flag`: missing, sentinel, or out_of_range (first match wins)."""
+    """Add `<measure>_flag`: missing, sentinel, or out_of_range (first match wins).
+
+    Option 4B, no per-measure sentinel list: a value equal to a sentinel is a sentinel
+    when it is outside the measure's valid range, or, inside the range, when it is far
+    from its neighbours at the same time (the other hubs in the row for a hub-level
+    measure, the hub mates for a panel measure). A real irradiance of 327.6 next to
+    hubs reading 330 is kept; 327.6 at night next to hubs reading 0 is not.
+    """
     v = cfg.thresholds["validation"]
     out = readings.copy()
     for m in MEASURES:
         x = out[m]
-        sentinel = np.zeros(len(out), dtype=bool)
-        for s in sentinels_for(m, cfg):
-            sentinel |= (x - s).abs().le(v["sentinel_tolerance"]).to_numpy()
         lo, hi = v["valid_ranges"][m]
+        outside = ((x < lo) | (x > hi)).to_numpy()
+        equal = np.zeros(len(out), dtype=bool)
+        for s in (float(k) for k in v["sentinel_values"]):
+            equal |= (x - s).abs().le(v["sentinel_tolerance"]).to_numpy()
+        sentinel = equal & outside
+        inside = np.flatnonzero(equal & ~outside)
+        if len(inside):
+            sentinel[inside] = ~_near_neighbours(out, m, inside, cfg)
         flag = np.select(
-            [x.isna().to_numpy(), sentinel, ((x < lo) | (x > hi)).to_numpy()],
+            [x.isna().to_numpy(), sentinel, outside],
             ["missing", "sentinel", "out_of_range"],
             default="",
         )
         out[f"{m}_flag"] = pd.Series(flag, index=out.index, dtype="str")
     return out
+
+
+def _near_neighbours(r: pd.DataFrame, m: str, pos: np.ndarray, cfg: Config) -> np.ndarray:
+    """For rows at positions `pos`: is the value close to the median of its neighbours?
+    No neighbour value means it cannot be confirmed, so the answer is False."""
+    ctx = cfg.thresholds["validation"]["sentinel_context"]
+    rows = r.iloc[pos]
+    if m in HUB_MEASURES:
+        rec = r[r["slot"].eq(r["slot"].min())].drop_duplicates(["timestamp_utc", "hub_id"])
+        wide = rec.pivot(index="timestamp_utc", columns="hub_id", values=m)
+        row_of = rec.drop_duplicates("hub_id").set_index("hub_id")["row"]
+        ref = [
+            wide.loc[t, [h for h in row_of.index if row_of[h] == row and h != hub]].median()
+            for t, hub, row in zip(rows["timestamp_utc"], rows["hub_id"], rows["row"], strict=True)
+        ]
+    else:
+        mates = r[r["raw_row"].isin(rows["raw_row"])]
+        ref = [
+            mates.loc[(mates["raw_row"] == rr) & (mates["slot"] != sl), m].median()
+            for rr, sl in zip(rows["raw_row"], rows["slot"], strict=True)
+        ]
+    ref = np.asarray(ref, dtype=float)
+    lo, hi = cfg.thresholds["validation"]["valid_ranges"][m]
+    limit = np.maximum(ctx["abs_tol_range_frac"] * (hi - lo), ctx["rel_tol"] * np.abs(ref))
+    return np.abs(rows[m].to_numpy() - ref) <= limit  # NaN ref compares False
 
 
 # C2 -------------------------------------------------------------------------------------

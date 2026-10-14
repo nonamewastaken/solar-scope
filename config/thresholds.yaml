@@ -11,10 +11,9 @@ validation:                     # owner: DQ. site.json wins for any key it also 
     temp_c: [-35, 95]
   sentinel_values: {}           # value -> meaning; filled from site.json
   sentinel_tolerance: 1.0e-6    # |value - sentinel| <= this counts as a sentinel
-  sentinel_measures:            # sentinel -> the measures it applies to. Unlisted = every measure
-    "327.6": [temp_c]           # thermistor short (real irradiance can read 327.6)
-    "-40.0": [temp_c]           # thermistor open circuit
-    "655.35": [current_a]       # ADC overflow on the current channel
+  sentinel_context:             # a sentinel value inside the valid range is real only when it is
+    rel_tol: 0.25               # within max(rel_tol * neighbour median, abs_tol_range_frac *
+    abs_tol_range_frac: 0.033   # range width) of its neighbours: 50 W/m2, 1.6 V, 4.3 C ...
 
 clean:                          # owner: DQ
   duplicate_keys: [timestamp_utc, hub_id]

@@ -31,7 +31,7 @@ teammate's unfinished code.
 | --- | --- | --- |
 | `""` | | Usable |
 | `missing` | clean | Blank in the raw file |
-| `sentinel` | clean | Equals a `cfg.thresholds.validation.sentinel_values` key that applies to this measure (`validation.sentinel_measures` scopes a sentinel to its measures; an unlisted sentinel applies to all). Takes precedence over `out_of_range`. |
+| `sentinel` | clean | Equals a `cfg.thresholds.validation.sentinel_values` key, and is either outside the valid range or far from its neighbours at the same time (`validation.sentinel_context`). Takes precedence over `out_of_range`. |
 | `out_of_range` | clean | Outside `cfg.thresholds.validation.valid_ranges[measure]`, inclusive bounds |
 | `conflict` | clean | Duplicate records for the same `(timestamp_utc, hub_id)` disagree on this value |
 | `gap` | clean | No record for this interval |

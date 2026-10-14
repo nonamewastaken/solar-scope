@@ -86,20 +86,42 @@ def test_value_flags(cleaned, stamp, panel, measure, reason):
     assert pd.isna(row[measure])
 
 
-def test_sentinels_are_scoped_to_their_measures(cfg):
-    assert 327.6 not in clean.sentinels_for("irradiance_wm2", cfg)
-    assert {327.6, -40.0} <= set(clean.sentinels_for("temp_c", cfg))
-    assert 655.35 in clean.sentinels_for("current_a", cfg)
-    assert 655.35 not in clean.sentinels_for("irradiance_wm2", cfg)
-    assert 6553.5 in clean.sentinels_for("humidity_pct", cfg)  # unlisted = every measure
-
-
-def test_real_irradiance_of_327_6_is_kept(inputs, cfg):
+def test_sentinel_outside_the_range_is_always_a_sentinel(inputs, cfg):
     r = inputs.readings.copy()
-    r.loc[0, ["irradiance_wm2", "temp_c"]] = [327.6, 327.6]
-    flags = clean.flag_values(r, cfg)
-    assert flags.loc[0, "irradiance_wm2_flag"] == ""
-    assert flags.loc[0, "temp_c_flag"] == "sentinel"
+    day = r.index[r.timestamp_utc.eq(pd.Timestamp("2025-11-01T17:00Z")) & r.hub_id.eq("H01")]
+    r.loc[day[0], "temp_c"] = 327.6  # thermistor short, above 95 C
+    assert clean.flag_values(r, cfg).loc[day[0], "temp_c_flag"] == "sentinel"
+
+
+def test_in_range_sentinel_is_kept_when_it_agrees_with_the_row(inputs, cfg):
+    r = inputs.readings.copy()
+    h02 = r[(r.hub_id == "H02") & r.irradiance_wm2.between(300, 360)].timestamp_utc
+    t = h02.iloc[0]  # H02 reads about 330 here, H01 is set to 327.6
+    hit = r.index[r.timestamp_utc.eq(t) & r.hub_id.eq("H01")]
+    r.loc[hit, "irradiance_wm2"] = 327.6
+    assert clean.flag_values(r, cfg).loc[hit, "irradiance_wm2_flag"].eq("").all()
+
+
+def test_in_range_sentinel_far_from_the_row_is_a_sentinel(inputs, cfg):
+    r = inputs.readings.copy()
+    night = r.index[r.timestamp_utc.eq(pd.Timestamp("2025-11-01T04:00Z")) & r.hub_id.eq("H01")]
+    r.loc[night, "irradiance_wm2"] = 327.6  # H02 reads 0 at night
+    assert clean.flag_values(r, cfg).loc[night, "irradiance_wm2_flag"].eq("sentinel").all()
+
+
+def test_panel_sentinel_inside_the_range_is_checked_against_hub_mates(inputs, cfg):
+    cfg.thresholds["validation"]["sentinel_values"]["36.0"] = "made-up in-range voltage"
+    r = inputs.readings.copy()
+    rec = r[r.irradiance_wm2.gt(300)].raw_row.iloc[0]
+    rows = r.index[r.raw_row.eq(rec)]
+    r.loc[rows[0], "voltage_v"] = 36.0  # mates read about 35-37 V: real
+    r.loc[rows[1], "current_a"] = 655.35  # out of range: sentinel
+    f = clean.flag_values(r, cfg)
+    assert f.loc[rows[0], "voltage_v_flag"] == ""
+    r.loc[rows[0], "voltage_v"] = 36.0
+    r.loc[rows[1:], "voltage_v"] = 0.5  # mates read 0.5 V: 36.0 is far off
+    assert clean.flag_values(r, cfg).loc[rows[0], "voltage_v_flag"] == "sentinel"
+    assert f.loc[rows[1], "current_a_flag"] == "sentinel"
 
 
 # C4 grid and C5 gaps --------------------------------------------------------------------
