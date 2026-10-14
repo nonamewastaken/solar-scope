@@ -173,3 +173,15 @@ def test_clock_offset_is_found_and_moved_back(tmp_path, offset):
 def test_healthy_hubs_have_no_clock_offset(tmp_path):
     cfg, inputs = synth.make_input(tmp_path, days=10)
     assert clean.clean(inputs, cfg).clock_offsets.empty
+
+
+def test_a_frozen_sensor_is_not_a_clock_offset(tmp_path):
+    def edit(w):
+        t = w["true_utc"].dt.tz_convert(TZ)
+        lo = pd.Timestamp("2026-03-04").tz_localize(TZ)
+        hit = w["hub_id"].eq("H03") & t.ge(lo) & t.lt(lo + pd.Timedelta(days=3))
+        w.loc[hit, "irradiance_wm2"] = 512.3  # flat line: its midday is noon
+        return w
+
+    cfg, inputs = synth.make_input(tmp_path, days=10, edit=edit)
+    assert clean.clean(inputs, cfg).clock_offsets.empty
