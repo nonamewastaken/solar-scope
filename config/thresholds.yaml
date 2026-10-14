@@ -26,6 +26,7 @@ clean:                          # owner: DQ
     min_days: 2                 # this many offset days in a row make a period
     min_irradiance_wm2: 50      # daylight, for the midday estimate
     min_daylight_intervals: 8   # skip days with less daylight than this (hub and peers)
+    min_corr: 0.9               # hub day vs peer curve moved by the offset (rejects frozen sensors)
 
 quality:                        # owner: DQ
   comm_outage_min_intervals: 8  # 2 h with no record = communication outage

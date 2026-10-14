@@ -160,7 +160,18 @@ def _daily_offsets(hub: pd.Series, peer: pd.Series, cfg: Config) -> pd.Series:
     raw = (s.ht / s.h - s.pt / s.p).where(enough)
     step = c["step_min"]
     rounded = (raw / step).round() * step
-    return rounded.where((raw - rounded).abs() <= c["tolerance_min"])
+    rounded = rounded.where((raw - rounded).abs() <= c["tolerance_min"])
+    # an offset must also make the shape fit: the hub's day correlates with the peer
+    # curve moved by the offset, better than with the unmoved one. A frozen sensor
+    # (flat line, midday at noon) fails this.
+    days = hub.index.tz_convert(cfg.tz).tz_localize(None).normalize()
+    for day in rounded.index[rounded.fillna(0).ne(0)]:
+        h = hub[days == day]
+        moved = peer.shift(freq=pd.Timedelta(minutes=rounded[day])).reindex(h.index)
+        fit, unmoved = h.corr(moved), h.corr(peer.reindex(h.index))
+        if not (fit >= c["min_corr"] and fit > unmoved):
+            rounded[day] = np.nan
+    return rounded
 
 
 def _offset_runs(daily: pd.Series, min_days: int) -> list[tuple]:
