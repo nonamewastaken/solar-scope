@@ -102,7 +102,13 @@ def test_slow_drift_is_found_and_dated_from_its_change_point(tmp_path):
     c = q.canonical
     late = c[(c.hub_id == "H03") & (c.timestamp_utc >= day("2026-06-01"))]
     assert late.sensor_excluded.all() and late.irradiance_wm2_reason.eq("sensor_drift").all()
-    assert late.irradiance_source.eq("row_median").all()
+    assert late.irradiance_source.eq("hub_corrected").all()  # option 2C: rescaled own value
+    # the corrected H03 values sit on the row again (daylight)
+    hub = c.drop_duplicates(["timestamp_utc", "hub_id"])
+    wide = hub.pivot(index="timestamp_utc", columns="hub_id", values="irradiance_used_wm2")
+    lit = wide[wide["H01"] > 200].loc[day("2026-06-01") :]
+    peers = lit[["H01", "H02", "H04"]].median(axis=1)
+    assert (lit["H03"] / peers).median() == pytest.approx(1.0, abs=0.02)
     others = c[c.hub_id != "H03"]
     assert not others.sensor_excluded.any() and others.irradiance_source.eq("hub").all()
 

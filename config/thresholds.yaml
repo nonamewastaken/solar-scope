@@ -48,7 +48,8 @@ quality:                        # owner: DQ
     skip_values: [0.0]          # identical runs at these values are normal (irradiance at night)
     humidity_peer_diff_pp: 20   # daily median humidity this far from the row median = stuck
     min_days: 3                 # for the humidity rule
-  fallback: row_median          # irradiance substitute for an excluded hub sensor
+  fallback: rescale             # drifting sensor: own value / drift factor; others: row median
+  fallback_rolling_days: 7      # centered window for the daily drift factor
   fallback_min_hubs: 1          # trusted hubs in the row needed for that substitute
 
 expected:                       # owner: EXP

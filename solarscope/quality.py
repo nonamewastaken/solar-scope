@@ -9,7 +9,9 @@ Q3 find_drift         irradiance ratio to the trusted hubs in the row, against t
                       (Q2 and Q3 repeat with the hubs found so far left out of the peer
                       medians, so one bad sensor cannot make its neighbours look bad)
 Q4 apply_exclusions   reason sensor_drift / sensor_stuck, sensor_excluded
-Q5 add_irradiance_used  the hub's own value when trusted, else the trusted row median
+Q5 add_irradiance_used  the hub's own value when trusted; for a drifting sensor its own
+                      value divided by the drift factor (option 2C); else the trusted
+                      row median
 Q6 comm_outages       gaps of at least quality.comm_outage_min_intervals
 Q7 data_quality       one row per hub per window (data_quality.csv)
 """
@@ -43,8 +45,9 @@ def assess(cleaned: Cleaned, inputs: Inputs, windows: list[Window], cfg: Config)
     rows = inputs.panels.drop_duplicates("hub_id").set_index("hub_id")["row"]
     hub = hub_sensors(cleaned.canonical)
     periods = find_sensor_periods(hub, rows, cfg)
+    factors = drift_factors(hub, rows, periods, cfg)
     canonical = apply_exclusions(cleaned.canonical, periods)
-    canonical = add_irradiance_used(canonical, cfg)
+    canonical = add_irradiance_used(canonical, cfg, cleaned.canonical["irradiance_wm2"], factors)
     outages = comm_outages(cleaned.gaps, cfg)
     dq = data_quality(cleaned, canonical, periods, outages, windows, inputs, cfg)
     return Quality(canonical, periods, outages, dq)
@@ -361,19 +364,64 @@ def apply_exclusions(canonical: pd.DataFrame, periods: pd.DataFrame) -> pd.DataF
     return out
 
 
-def add_irradiance_used(canonical: pd.DataFrame, cfg: Config) -> pd.DataFrame:
-    """irradiance_used_wm2: the hub's own value when it is usable, else the median of the
-    usable hubs in the same row at that interval, else NaN (source none)."""
+def drift_factors(hub: dict, rows: pd.Series, periods: pd.DataFrame, cfg) -> pd.DataFrame:
+    """Per drifting hub and local day: how far its irradiance reads off (1.20 = 20 % high).
+
+    The daily ratio to the trusted row median, divided by the hub's own normal ratio, on
+    a centered `fallback_rolling_days` median. Days without a ratio (overcast, gaps) are
+    interpolated, so every day of the period has a factor.
+    """
+    q = cfg.thresholds["quality"]
+    irr = hub["irradiance_wm2"]
+    trusted = mask_periods(irr, periods, "irradiance_wm2")
+    last_day = local_day(irr.index, cfg).max()
+    out = []
+    for p in periods[(periods.sensor == "irradiance_wm2") & (periods.kind == "drift")].itertuples():
+        ratio = daily_ratio(irr, trusted, rows, p.hub_id, cfg)
+        base = ratio.iloc[: q["drift"]["baseline_days"]].median()
+        smooth = (
+            (ratio / base)
+            .rolling(f"{q['fallback_rolling_days']}D", center=True, min_periods=1)
+            .median()
+        )
+        first = local_day(pd.DatetimeIndex([p.start_utc]), cfg)[0]
+        last = last_day if pd.isna(p.end_utc) else local_day(pd.DatetimeIndex([p.end_utc]), cfg)[0]
+        days = pd.date_range(first, last, freq="D")
+        f = smooth.reindex(smooth.index.union(days)).interpolate("time").ffill().bfill()
+        out.append(
+            pd.DataFrame({"hub_id": p.hub_id, "local_date": days, "factor": f[days].to_numpy()})
+        )
+    cols = ["hub_id", "local_date", "factor"]
+    return pd.concat(out, ignore_index=True) if out else pd.DataFrame(columns=cols)
+
+
+def add_irradiance_used(
+    canonical: pd.DataFrame, cfg: Config, raw_irradiance: pd.Series, factors: pd.DataFrame
+) -> pd.DataFrame:
+    """irradiance_used_wm2: the hub's own value when it is usable. For a drifting sensor
+    (reason sensor_drift) its own raw value divided by that day's drift factor, source
+    `hub_corrected`. Otherwise the median of the usable hubs in the same row at that
+    interval, else NaN (source none)."""
     q = cfg.thresholds["quality"]
     out = canonical.copy()
+    raw = raw_irradiance.to_numpy()
     hub = out.drop_duplicates(KEY)[[*KEY, "row", "irradiance_wm2"]]
     g = hub.groupby(["timestamp_utc", "row"])["irradiance_wm2"]
     row_med = g.transform("median").where(g.transform("count") >= q["fallback_min_hubs"])
     sub = hub.assign(row_median=row_med)[[*KEY, "row_median"]]
     out = out.merge(sub, on=KEY, how="left")
+    f = out[["hub_id", "local_date"]].merge(factors, on=["hub_id", "local_date"], how="left")
+    corrected = pd.Series(raw / f["factor"].to_numpy(), index=out.index)
+    corrected = corrected.where(out["irradiance_wm2_reason"].eq("sensor_drift"))
     own = out["irradiance_wm2"].notna()
-    out["irradiance_used_wm2"] = out["irradiance_wm2"].where(own, out["row_median"])
-    source = np.where(own, "hub", np.where(out["row_median"].notna(), "row_median", "none"))
+    fixed = ~own & corrected.notna()
+    used = out["irradiance_wm2"].where(own, corrected.where(fixed, out["row_median"]))
+    out["irradiance_used_wm2"] = used
+    source = np.where(
+        own,
+        "hub",
+        np.where(fixed, "hub_corrected", np.where(out["row_median"].notna(), "row_median", "none")),
+    )
     out["irradiance_source"] = pd.Series(source, index=out.index, dtype="str")
     return out.drop(columns="row_median")
 
