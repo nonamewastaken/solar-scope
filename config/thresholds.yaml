@@ -46,8 +46,11 @@ quality:                        # owner: DQ
   stuck:
     min_intervals: 16           # identical value this many intervals in a row
     skip_values: [0.0]          # identical runs at these values are normal (irradiance at night)
-    humidity_peer_diff_pp: 20   # daily median humidity this far from the row median = stuck
-    min_days: 3                 # for the humidity rule
+    humidity_stuck_values: [100.0]  # humidity that sits at these values is suspect
+    near_tolerance: 1.0         # within this of a stuck value counts as "at" it
+    day_fraction: 0.5           # a day is saturated when this share of its readings is at it
+    rolling_days: 7             # centered mean of that share
+    min_days: 3                 # saturated days in a row for a period
   fallback: row_median          # irradiance substitute for an excluded hub sensor
   fallback_min_hubs: 1          # trusted hubs in the row needed for that substitute
 

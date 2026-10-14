@@ -3,7 +3,8 @@
 See docs/contracts.md §4. Steps:
 
 Q1 hub_sensors        one value per hub and interval for each hub-level sensor
-Q2 find_stuck         identical-value runs (any hub sensor), and humidity far from its row
+Q2 find_stuck         identical-value runs (any hub sensor), and humidity that sits near
+                      100% most of each day (option 3B: the hub alone, no peers)
 Q3 find_drift         irradiance ratio to the trusted hubs in the row, against the hub's
                       own normal ratio; the start is moved back to the change point
                       (Q2 and Q3 repeat with the hubs found so far left out of the peer
@@ -159,7 +160,7 @@ def day_runs(flag: pd.Series, min_days: int) -> list[tuple[pd.Timestamp, pd.Time
 
 def find_stuck(hub: dict, trusted: dict, rows: pd.Series, cfg: Config) -> pd.DataFrame:
     return pd.concat(
-        [*(identical_runs(hub[m], m, cfg) for m in hub), humidity_vs_row(hub, trusted, rows, cfg)],
+        [*(identical_runs(hub[m], m, cfg) for m in hub), humidity_near_stuck(hub, cfg)],
         ignore_index=True,
     )
 
@@ -191,20 +192,31 @@ def identical_runs(wide: pd.DataFrame, sensor: str, cfg: Config) -> pd.DataFrame
     return pd.DataFrame(out, columns=[*PERIOD_COLUMNS, "severity"]) if out else empty_periods()
 
 
-def humidity_vs_row(hub: dict, trusted: dict, rows: pd.Series, cfg: Config) -> pd.DataFrame:
-    """Daily median humidity more than `humidity_peer_diff_pp` from the row median for
-    `stuck.min_days` days or more (H09 sits near 100% while its row reads 50-70%)."""
-    q = cfg.thresholds["quality"]
-    s = q["stuck"]
-    raw, tr = hub["humidity_pct"], trusted["humidity_pct"]
-    last_day = local_day(raw.index, cfg).max()
+def humidity_near_stuck(hub: dict, cfg: Config) -> pd.DataFrame:
+    """Option 3B, the hub alone (no peers): a day is saturated when at least
+    `day_fraction` of its readings are within `near_tolerance` of a
+    `humidity_stuck_values` value. On a centered `rolling_days` mean of that share,
+    `min_days` days or more in a row make a period, trimmed to its first and last
+    saturated day. Works in a row with one hub; a long real fog would also match."""
+    s = cfg.thresholds["quality"]["stuck"]
+    raw = hub["humidity_pct"]
+    days = local_day(raw.index, cfg)
+    last_day = days.max()
     out = []
     for h in raw.columns:
-        diff = raw[h] - peer_median(tr, rows, h, q["min_peer_hubs"])
-        daily = diff.groupby(local_day(diff.index, cfg)).median()
-        hit = daily.abs().gt(s["humidity_peer_diff_pp"]).where(daily.notna())
+        x = raw[h]
+        near = pd.Series(False, index=x.index)
+        for v in s["humidity_stuck_values"]:
+            near |= (x - v).abs().le(s["near_tolerance"])
+        frac = near.astype(float).where(x.notna()).groupby(days).mean()
+        smooth = frac.rolling(f"{s['rolling_days']}D", center=True, min_periods=1).mean()
+        hit = smooth.ge(s["day_fraction"]).where(frac.notna())
         for first, last in day_runs(hit, s["min_days"]):
-            d = daily.loc[first:last]
+            sat = frac.loc[first:last].ge(s["day_fraction"])
+            if not sat.any():
+                continue
+            first, last = sat.index[sat][0], sat.index[sat][-1]
+            share = frac.loc[first:last].mean()
             out.append(
                 {
                     "hub_id": h,
@@ -212,9 +224,10 @@ def humidity_vs_row(hub: dict, trusted: dict, rows: pd.Series, cfg: Config) -> p
                     "kind": "stuck",
                     "start_utc": day_start_utc(first, cfg),
                     "end_utc": _end(last, last_day, cfg),
-                    "evidence": f"humidity {d.median():+.0f} pp vs row median "
-                    f"(daily median) for {d.notna().sum()} days",
-                    "severity": abs(d.median()) / s["humidity_peer_diff_pp"],
+                    "evidence": f"humidity within {s['near_tolerance']:g} of "
+                    f"{'/'.join(f'{v:g}' for v in s['humidity_stuck_values'])} for "
+                    f"{share:.0%} of readings over {(last - first).days + 1} days",
+                    "severity": np.nan,  # does not depend on peers
                 }
             )
     return pd.DataFrame(out, columns=[*PERIOD_COLUMNS, "severity"]) if out else empty_periods()
