@@ -8,10 +8,17 @@ includes the DST fall-back day, and it follows the real input schemas.
 | --- | --- | --- |
 | `raw/` | `readings.csv`, `site.json`, `weather.csv`, `service_log.csv` | Khang |
 | `loaded/readings.csv` | Stage 1 output (`docs/contracts.md` §2), built independently of `load.py` | Khang |
-| `cleaned/`, `quality/` | Stage 2–3 outputs | Member 2 (day 2–3) |
-| `expected/` | Stage 4 outputs | Member 3 |
-| `events/`, `dispatch/` | Stage 5 outputs | Member 4 |
-| `summary/` | Stage 6 outputs | Member 5 |
+| `handcalc/handcalc.csv` | 16 real rows worked by hand (SOL-13) | Khang |
+| `results/` | One output folder: `data_quality.csv`, `panel_daily.csv`, `events.csv`, `dispatch.csv`, `summary.json`. Made by `make_result_fixtures.py`. `report.render` and `summary.py` are built against it, and `tests/test_result_fixtures.py` keeps it consistent. | Khang |
+| `quality/data_quality.csv` | Real DQ fixture from dtri (SOL-12). Not here yet: `results/data_quality.csv` is a placeholder until it lands. | dtri |
+
+The result fixtures follow the contract and agree with each other. They are not derived
+from the fixture readings. They use 2 windows, 365d (2024-11-04 to 2025-11-03) and 180d
+(2025-05-08 to 2025-11-03), which both hold all 3 days, so the two summary blocks match.
+Story: E0001 cloud (11-02), E0002 P05 wiring (repaired, not dispatched), E0003 P02 hotspot
+(active, dispatched), E0004 H02 data gap, E0005 P03 slow decline, E0006 P06 unresolved.
+In `data_quality.csv`, `n_conflict` is 2 for H02 (both records of the key carry `is_conflict`)
+and `usable_pct` is tiny because the windows hold 3 days of data.
 
 ## Site
 
@@ -53,3 +60,4 @@ The loaded file has 582 × 3 = **1746** rows.
 
 - SR-9001 (`ALL`, no fault, weather) is a candidate for "truck roll avoided".
 - SR-9002 (P05, wiring, fault found) is a real repair.
+- SR-9003 (P05, wiring, 2025-10-20, fault found) is an earlier repair, so P05 is a repeat.

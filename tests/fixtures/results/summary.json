@@ -1,0 +1,316 @@
+{
+  "schema_version": 1,
+  "run_id": "20251104T000000Z-fixture",
+  "generated_at_utc": "2025-11-04T00:00:00Z",
+  "site_id": "SS-FIXTURE-001",
+  "config_hash": "31bd1d050bb9e5d4adb57c081b3bea20e968a745f9aed0ec096f280c8db1c684",
+  "config": {
+    "validation": {
+      "valid_ranges": {
+        "irradiance_wm2": [
+          0,
+          1500
+        ],
+        "humidity_pct": [
+          0,
+          100
+        ],
+        "voltage_v": [
+          0,
+          50
+        ],
+        "current_a": [
+          0,
+          13
+        ],
+        "temp_c": [
+          -35,
+          95
+        ]
+      },
+      "sentinel_values": {
+        "6553.5": "ADC overflow on 16 bit channel",
+        "655.35": "ADC overflow on current channel",
+        "-40.0": "thermistor open circuit",
+        "327.6": "thermistor short"
+      },
+      "sentinel_tolerance": 1e-06
+    },
+    "clean": {
+      "duplicate_keys": [
+        "timestamp_utc",
+        "hub_id"
+      ],
+      "conflict_keep": "none",
+      "gap_min_intervals": 1
+    },
+    "quality": {
+      "comm_outage_min_intervals": 8,
+      "peer_group": "row",
+      "min_peer_hubs": 2,
+      "drift": {
+        "min_irradiance_wm2": 200,
+        "ratio_tolerance": 0.1,
+        "min_days": 3,
+        "rolling_days": 7
+      },
+      "stuck": {
+        "min_intervals": 16,
+        "humidity_stuck_values": [
+          100.0
+        ]
+      },
+      "fallback": "row_median"
+    },
+    "expected": {
+      "min_irradiance_wm2": 50,
+      "reference_temp_c": 25,
+      "peer": {
+        "group": "hub_then_row",
+        "min_peers": 2,
+        "reference_period_days": 30
+      },
+      "hand_calc_tolerance_pct": 2
+    },
+    "decline": {
+      "rolling_days": 14,
+      "min_history_days": 30,
+      "slope_threshold_pct_per_month": -1.0,
+      "deficit_threshold_pct": 3.0,
+      "alarm_deficit_pct": 10.0,
+      "ignore_causes": [
+        "snow",
+        "soiling",
+        "sensor_drift",
+        "sensor_stuck"
+      ]
+    },
+    "classify": {
+      "grouping": {
+        "max_gap_intervals": 4,
+        "min_event_intervals": 2
+      },
+      "abnormal_peer_ratio": 0.85,
+      "string_outage": {
+        "current_max_a": 0.2,
+        "voltage_min_frac_voc": 0.9,
+        "min_irradiance_wm2": 200
+      },
+      "wiring": {
+        "zero_current_max_a": 0.1,
+        "min_dropouts_per_day": 2
+      },
+      "hotspot": {
+        "voltage_step_frac": 0.33,
+        "voltage_step_tolerance": 0.08,
+        "temp_delta_c": 5.0
+      },
+      "snow": {
+        "snwd_min_in": 0.1
+      },
+      "soiling": {
+        "min_days": 7,
+        "reset_rain_in": 0.25
+      },
+      "heat": {
+        "temp_min_c": 50
+      },
+      "cloud": {
+        "acsh_min_pct": 70
+      }
+    },
+    "dispatch": {
+      "require_active": true,
+      "active_tolerance_hours": 24,
+      "min_event_hours": 2,
+      "min_kwh_lost": 0.5,
+      "priority_kwh_per_day": {
+        "high": 2.0,
+        "medium": 0.5
+      }
+    },
+    "servicelog": {
+      "match_window_days": 7,
+      "repeat_min_repairs": 2
+    },
+    "report_windows": {
+      "end_date": null,
+      "windows": [
+        {
+          "name": "365d",
+          "days": 365
+        },
+        {
+          "name": "180d",
+          "days": 180
+        }
+      ]
+    }
+  },
+  "input_checksums": {
+    "readings.csv": "48f89652eb292fd23478c8e2affa8ef60d5cb4388e91f8835b2a1685d5d75695",
+    "site.json": "d645b22610f6bdcb3bb1ce0b2cf2630f8b4ea23ec6d81eb8157ca03e1de255a4",
+    "weather.csv": "4652a5c5644bd5b838ad742f97ab9b8ba8f74d69e1878f7902e4a39b2fa1b506",
+    "service_log.csv": "d721c623746fe1983102e34d1183dc08303c7f33b0a0ee3fe207273e96b1ec1b"
+  },
+  "files": {
+    "data_quality": "data_quality.csv",
+    "panel_daily": "panel_daily.csv",
+    "events": "events.csv",
+    "dispatch": "dispatch.csv"
+  },
+  "windows": {
+    "365d": {
+      "start": "2024-11-04",
+      "end": "2025-11-03",
+      "days": 365,
+      "actual_kwh": 15.27,
+      "expected_kwh": 16.5,
+      "kwh_lost_total": 1.23,
+      "kwh_lost_by_label": {
+        "fault": 0.59,
+        "weather": 0.5,
+        "sensor_issue": 0.0,
+        "data_issue": 0.04,
+        "early_warning": 0.05,
+        "unresolved": 0.05
+      },
+      "events_by_label": {
+        "fault": 2,
+        "weather": 1,
+        "sensor_issue": 0,
+        "data_issue": 1,
+        "early_warning": 1,
+        "unresolved": 1
+      },
+      "n_dispatches": 1,
+      "n_dispatch_panels": 1,
+      "n_early_warnings": 1,
+      "top_findings": [
+        {
+          "rank": 1,
+          "text": "weather/cloud on P01, P02, P03, P04, P05, P06",
+          "kwh_lost": 0.5,
+          "event_id": "E0001"
+        },
+        {
+          "rank": 2,
+          "text": "fault/hotspot on P02",
+          "kwh_lost": 0.35,
+          "event_id": "E0003"
+        },
+        {
+          "rank": 3,
+          "text": "fault/wiring on P05",
+          "kwh_lost": 0.24,
+          "event_id": "E0002"
+        }
+      ],
+      "repeat_repairs": [
+        {
+          "panel_id": "P05",
+          "hub_id": "H02",
+          "n_repairs": 2,
+          "ticket_ids": [
+            "SR-9003",
+            "SR-9002"
+          ],
+          "visit_dates": [
+            "2025-10-20",
+            "2025-11-03"
+          ],
+          "root_cause": "loose connector",
+          "permanent_fix": "Replace both connector halves with a matched pair from one maker"
+        }
+      ],
+      "truck_rolls_avoided": {
+        "count": 1,
+        "cost_usd": 350.0,
+        "ticket_ids": [
+          "SR-9001"
+        ]
+      },
+      "service_visits": {
+        "total": 3,
+        "fault_found": 2,
+        "no_fault": 1
+      }
+    },
+    "180d": {
+      "start": "2025-05-08",
+      "end": "2025-11-03",
+      "days": 180,
+      "actual_kwh": 15.27,
+      "expected_kwh": 16.5,
+      "kwh_lost_total": 1.23,
+      "kwh_lost_by_label": {
+        "fault": 0.59,
+        "weather": 0.5,
+        "sensor_issue": 0.0,
+        "data_issue": 0.04,
+        "early_warning": 0.05,
+        "unresolved": 0.05
+      },
+      "events_by_label": {
+        "fault": 2,
+        "weather": 1,
+        "sensor_issue": 0,
+        "data_issue": 1,
+        "early_warning": 1,
+        "unresolved": 1
+      },
+      "n_dispatches": 1,
+      "n_dispatch_panels": 1,
+      "n_early_warnings": 1,
+      "top_findings": [
+        {
+          "rank": 1,
+          "text": "weather/cloud on P01, P02, P03, P04, P05, P06",
+          "kwh_lost": 0.5,
+          "event_id": "E0001"
+        },
+        {
+          "rank": 2,
+          "text": "fault/hotspot on P02",
+          "kwh_lost": 0.35,
+          "event_id": "E0003"
+        },
+        {
+          "rank": 3,
+          "text": "fault/wiring on P05",
+          "kwh_lost": 0.24,
+          "event_id": "E0002"
+        }
+      ],
+      "repeat_repairs": [
+        {
+          "panel_id": "P05",
+          "hub_id": "H02",
+          "n_repairs": 2,
+          "ticket_ids": [
+            "SR-9003",
+            "SR-9002"
+          ],
+          "visit_dates": [
+            "2025-10-20",
+            "2025-11-03"
+          ],
+          "root_cause": "loose connector",
+          "permanent_fix": "Replace both connector halves with a matched pair from one maker"
+        }
+      ],
+      "truck_rolls_avoided": {
+        "count": 1,
+        "cost_usd": 350.0,
+        "ticket_ids": [
+          "SR-9001"
+        ]
+      },
+      "service_visits": {
+        "total": 3,
+        "fault_found": 2,
+        "no_fault": 1
+      }
+    }
+  }
+}

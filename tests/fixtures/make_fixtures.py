@@ -133,6 +133,13 @@ def main() -> None:
          "action_taken": "Reseated connector", "fault_found": "Y",
          "root_cause": "loose connector", "category": "wiring", "tech_hours": 1.5,
          "parts_cost_usd": 12, "parts_used": "strain relief clip", "truck_roll_cost_usd": 350},
+        # appended last so rows 0 and 1 keep their positions; makes P05 a repeat repair
+        {"ticket_id": "SR-9003", "visit_date": "2025-10-20", "arrival_time_local": "09:15",
+         "trigger": "monitoring_alert", "hub_ids": "H02", "panel_ids": "P05",
+         "reported_issue": "P05 dropping out", "finding": "Loose MC4 connector",
+         "action_taken": "Reseated connector", "fault_found": "Y",
+         "root_cause": "loose connector", "category": "wiring", "tech_hours": 1.0,
+         "parts_cost_usd": 0, "parts_used": "", "truck_roll_cost_usd": 350},
     ])  # fmt: skip
 
     # loaded: long format per docs/contracts.md §2, built independently of solarscope.load

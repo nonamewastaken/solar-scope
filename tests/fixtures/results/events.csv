@@ -1,0 +1,7 @@
+event_id,label,cause,scope,hub_ids,panel_ids,start_local,end_local,duration_h,kwh_lost,status,evidence,first_flag_date,decline_rate_pct_per_month,current_deficit_pct,projected_10pct_date
+E0001,weather,cloud,array,H01;H02,P01;P02;P03;P04;P05;P06,2025-11-02T00:00:00-04:00,2025-11-03T00:00:00-05:00,25.0,0.5,resolved,"Overcast (ACSH 95), irradiance low at both hubs, all panels low together",,,,
+E0002,fault,wiring,panel,H02,P05,2025-11-01T10:00:00-04:00,2025-11-03T10:00:00-05:00,49.0,0.24,resolved,"I drops to 0 for 15-60 min, 4-9 times a day, V normal, hub mates normal",,,,
+E0003,fault,hotspot,panel,H01,P02,2025-11-03T09:00:00-05:00,2025-11-04T00:00:00-05:00,15.0,0.35,active,"V -33% vs hub mates, I normal, T +8C",,,,
+E0004,data_issue,data_gap,hub,H02,P04;P05;P06,2025-11-03T14:00:00-05:00,2025-11-03T15:00:00-05:00,1.0,0.04,resolved,No records for 4 intervals (19:00-20:00Z),,,,
+E0005,early_warning,slow_decline,panel,H01,P03,2025-11-02T00:00:00-04:00,2025-11-04T00:00:00-05:00,49.0,0.05,active,"Peer ratio falling 1.5%/month, 4.0% behind hub mates",2025-11-02,-1.5,4.0,2026-03-01
+E0006,unresolved,unknown,panel,H02,P06,2025-11-01T11:00:00-04:00,2025-11-01T13:00:00-04:00,2.0,0.05,resolved,"P06 2 h dip, V and I both about 15% low, no matching signature",,,,
