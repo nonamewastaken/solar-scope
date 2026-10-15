@@ -86,6 +86,11 @@ dispatch:                       # owner: CLS
 servicelog:                     # owner: RPT
   match_window_days: 7          # visit matched to events within this many days before it
   repeat_min_repairs: 2
+  avoidable_labels: [weather]   # a no-fault visit explained by these event labels is avoidable
+  permanent_fix:                # by the latest repair's service-log category
+    wiring: "Replace both connector halves with a matched pair from one maker"
+    string_outage: "Replace fuse holder; inspect combiner for heat damage"
+    hotspot: "Replace module under warranty"
 
 report_windows:                 # owner: INT. Lengths, not dates.
   end_date: null                # null = last complete local day in readings.csv
