@@ -188,13 +188,13 @@ solarscope/load.py         1      Khang     Read, validate, convert time, reshap
 solarscope/clean.py        2      Member 2  Flag duplicates, gaps, sentinels, ranges
 solarscope/quality.py      3      Member 2  Usable %, sensor drift/stuck, exclusion,
                                             irradiance fallback
-solarscope/expected.py     4      Member 3  Energy, physics + peer baselines, losses
-solarscope/decline.py      4b     Member 3  Slow-decline detection
-solarscope/classify.py     5      Member 4  Event grouping and labels
-solarscope/dispatch.py     5      Member 4  Dispatch rules, fault vs. weather split
-solarscope/servicelog.py   6      Member 5  Repeat repairs, truck rolls avoided
-solarscope/summary.py      6      Member 5  Build summary.json
-solarscope/report.py       6      Member 5  Render the two PDFs
+solarscope/expected.py     4      Khang     Energy, physics + peer baselines, losses
+solarscope/decline.py      4b     Khang     Slow-decline detection
+solarscope/classify.py     5      Khang     Event grouping and labels
+solarscope/dispatch.py     5      Khang     Dispatch rules, fault vs. weather split
+solarscope/servicelog.py   6      Khang     Repeat repairs, truck rolls avoided
+solarscope/summary.py      6      Khang     Build summary.json
+solarscope/report.py       6      Khang     Render the two PDFs
 scripts/score.py           after  Khang     Scorecard against the answer key
 
 
@@ -336,9 +336,9 @@ Workstreams (Linear label = owner):
   INT  Lead / Integration  Khang     run.py, config.py, results.py, load.py,
                                      contracts, score.py, README, flowsheet
   DQ   Data Quality        Member 2  clean.py, quality.py
-  EXP  Expected Output     Member 3  expected.py, decline.py
-  CLS  Classification      Member 4  classify.py, dispatch.py
-  RPT  Reports             Member 5  servicelog.py, summary.py, report.py
+  EXP  Expected Output     Khang     expected.py, decline.py
+  CLS  Classification      Khang     classify.py, dispatch.py
+  RPT  Reports             Khang     servicelog.py, summary.py, report.py
                                      (also helps review events in Phase 3)
 
 No-waiting rule: stage contracts (docs/contracts.md) are agreed on day 1. Each
