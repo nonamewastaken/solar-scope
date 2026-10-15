@@ -4,9 +4,13 @@ See docs/contracts.md §3. Flag, never delete: every raw row survives in `flags`
 Steps, in order (each one needs the one before it):
 
 C1 flag_values        missing, then sentinel, then out_of_range, per measure
-C2 fix_clock_offsets  find hubs whose clock ran a whole number of hours off and move
-                      their records back to the true time (before C3, because an
-                      offset is what creates fake conflicts and gaps)
+                      (dq.sentinel: `listed` = per-measure list, `context` = a sentinel
+                      inside the valid range must also disagree with its neighbours)
+C2 fix_clock_offsets  find hubs whose clock ran a whole number of hours off (before C3,
+                      because an offset is what creates fake conflicts and gaps), then
+                      dq.clock_offset: `shift` moves their records back to the true
+                      time, `exclude` keeps the label and flags every measure
+                      `clock_offset`
 C3 flag_duplicates    exact duplicates, conflicting duplicates, the record kept per key
 C4 build_canonical    one row per (timestamp_utc, panel_id) on the full grid
 C5 find_gaps          runs of intervals with no record, per hub
@@ -62,15 +66,17 @@ def sentinels_for(measure: str, cfg: Config) -> list[float]:
 def flag_values(readings: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     """Add `<measure>_flag`: missing, sentinel, or out_of_range (first match wins)."""
     v = cfg.thresholds["validation"]
+    context = cfg.thresholds["dq"]["sentinel"] == "context"
     out = readings.copy()
     for m in MEASURES:
         x = out[m]
-        sentinel = np.zeros(len(out), dtype=bool)
-        for s in sentinels_for(m, cfg):
-            sentinel |= (x - s).abs().le(v["sentinel_tolerance"]).to_numpy()
         lo, hi = v["valid_ranges"][m]
+        outside = ((x < lo) | (x > hi)).to_numpy()
+        sentinel = (
+            _sentinel_context(out, m, outside, cfg) if context else _sentinel_listed(out, m, cfg)
+        )
         flag = np.select(
-            [x.isna().to_numpy(), sentinel, ((x < lo) | (x > hi)).to_numpy()],
+            [x.isna().to_numpy(), sentinel, outside],
             ["missing", "sentinel", "out_of_range"],
             default="",
         )
@@ -78,14 +84,67 @@ def flag_values(readings: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     return out
 
 
+def _sentinel_listed(out: pd.DataFrame, m: str, cfg: Config) -> np.ndarray:
+    """dq.sentinel = listed: a value equal to a sentinel that applies to this measure."""
+    tol = cfg.thresholds["validation"]["sentinel_tolerance"]
+    sentinel = np.zeros(len(out), dtype=bool)
+    for s in sentinels_for(m, cfg):
+        sentinel |= (out[m] - s).abs().le(tol).to_numpy()
+    return sentinel
+
+
+def _sentinel_context(out: pd.DataFrame, m: str, outside: np.ndarray, cfg: Config) -> np.ndarray:
+    """dq.sentinel = context, no per-measure list: a value equal to a sentinel is a
+    sentinel when it is outside the measure's valid range, or, inside the range, when it
+    is far from its neighbours at the same time (the other hubs in the row for a hub-level
+    measure, the hub mates for a panel measure). A real irradiance of 327.6 next to hubs
+    reading 330 is kept; 327.6 at night next to hubs reading 0 is not."""
+    v = cfg.thresholds["validation"]
+    equal = np.zeros(len(out), dtype=bool)
+    for s in (float(k) for k in v["sentinel_values"]):
+        equal |= (out[m] - s).abs().le(v["sentinel_tolerance"]).to_numpy()
+    sentinel = equal & outside
+    inside = np.flatnonzero(equal & ~outside)
+    if len(inside):
+        sentinel[inside] = ~_near_neighbours(out, m, inside, cfg)
+    return sentinel
+
+
+def _near_neighbours(r: pd.DataFrame, m: str, pos: np.ndarray, cfg: Config) -> np.ndarray:
+    """For rows at positions `pos`: is the value close to the median of its neighbours?
+    No neighbour value means it cannot be confirmed, so the answer is False."""
+    ctx = cfg.thresholds["validation"]["sentinel_context"]
+    rows = r.iloc[pos]
+    if m in HUB_MEASURES:
+        rec = r[r["slot"].eq(r["slot"].min())].drop_duplicates(["timestamp_utc", "hub_id"])
+        wide = rec.pivot(index="timestamp_utc", columns="hub_id", values=m)
+        row_of = rec.drop_duplicates("hub_id").set_index("hub_id")["row"]
+        ref = [
+            wide.loc[t, [h for h in row_of.index if row_of[h] == row and h != hub]].median()
+            for t, hub, row in zip(rows["timestamp_utc"], rows["hub_id"], rows["row"], strict=True)
+        ]
+    else:
+        mates = r[r["raw_row"].isin(rows["raw_row"])]
+        ref = [
+            mates.loc[(mates["raw_row"] == rr) & (mates["slot"] != sl), m].median()
+            for rr, sl in zip(rows["raw_row"], rows["slot"], strict=True)
+        ]
+    ref = np.asarray(ref, dtype=float)
+    lo, hi = cfg.thresholds["validation"]["valid_ranges"][m]
+    limit = np.maximum(ctx["abs_tol_range_frac"] * (hi - lo), ctx["rel_tol"] * np.abs(ref))
+    return np.abs(rows[m].to_numpy() - ref) <= limit  # NaN ref compares False
+
+
 # C2 -------------------------------------------------------------------------------------
 
 
 def fix_clock_offsets(flags: pd.DataFrame, cfg: Config) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Find clock-offset periods and move those records back to the true time.
+    """Find clock-offset periods, then (dq.clock_offset) move those records back to the true
+    time (`shift`) or leave them where they are and flag them (`exclude`).
 
     Adds `timestamp_raw_utc` (the label as written) and `clock_offset_min` (label minus
-    true time, 0 when the clock was right), then fixes timestamp_utc/_local/local_date.
+    true time, 0 when the clock was right). `shift` fixes timestamp_utc/_local/local_date.
+    `exclude` gives every measure of an offset record the reason `clock_offset`.
     """
     out = flags.copy()
     out["timestamp_raw_utc"] = out["timestamp_utc"]
@@ -94,11 +153,15 @@ def fix_clock_offsets(flags: pd.DataFrame, cfg: Config) -> tuple[pd.DataFrame, p
     for p in periods:
         hit = out["raw_row"].isin(p["raw_rows"])
         out.loc[hit, "clock_offset_min"] = p["offset_min"]
-    shift = pd.to_timedelta(out["clock_offset_min"], unit="min")
-    out["timestamp_utc"] = (out["timestamp_raw_utc"] - shift).dt.as_unit("us")
-    out["timestamp_local"] = out["timestamp_utc"].dt.tz_convert(cfg.tz)
-    out["local_date"] = out["timestamp_local"].dt.tz_localize(None).dt.normalize()
-    out = out.sort_values(["timestamp_utc", "hub_id", "raw_row", "slot"]).reset_index(drop=True)
+    if cfg.thresholds["dq"]["clock_offset"] == "exclude":
+        for m in MEASURES:
+            out.loc[out["clock_offset_min"].ne(0), f"{m}_flag"] = "clock_offset"
+    else:
+        shift = pd.to_timedelta(out["clock_offset_min"], unit="min")
+        out["timestamp_utc"] = (out["timestamp_raw_utc"] - shift).dt.as_unit("us")
+        out["timestamp_local"] = out["timestamp_utc"].dt.tz_convert(cfg.tz)
+        out["local_date"] = out["timestamp_local"].dt.tz_localize(None).dt.normalize()
+        out = out.sort_values(["timestamp_utc", "hub_id", "raw_row", "slot"]).reset_index(drop=True)
     table = pd.DataFrame(
         [{c: p[c] for c in OFFSET_COLUMNS} for p in periods], columns=OFFSET_COLUMNS
     )
@@ -287,14 +350,19 @@ def flag_duplicates(flags: pd.DataFrame) -> pd.DataFrame:
     Conflict: the key has records with different values. Each measure the records
     disagree on gets reason `conflict` on all of them (unless already flagged), so its
     canonical value is NaN (`clean.conflict_keep: none`).
-    Kept: the earliest-received record per key.
+    Kept: the earliest-received record per key, preferring a record whose clock was right.
+    Records excluded for a clock offset (dq.clock_offset = exclude) never count as
+    conflicts: they are not trusted to belong to that timestamp at all.
     """
     out = flags.copy()
-    rec = hub_records(out).sort_values("raw_row")
+    bad = out["irradiance_wm2_flag"].eq("clock_offset")
+    rec = hub_records(out).assign(bad=bad).sort_values("raw_row")
     rec = rec.assign(sig=_record_signature(out, rec["raw_row"]).to_numpy())
     rec["is_duplicate"] = rec.duplicated([*KEY, "sig"], keep="first")
-    rec["is_conflict"] = rec.groupby(KEY)["sig"].transform("nunique").gt(1)
-    rec["is_kept"] = ~rec.duplicated(KEY, keep="first")
+    good = rec[~rec["bad"]]
+    conflict = good.groupby(KEY)["sig"].transform("nunique").gt(1)
+    rec["is_conflict"] = conflict.reindex(rec.index, fill_value=False)
+    rec["is_kept"] = ~rec.sort_values(["bad", "raw_row"]).duplicated(KEY, keep="first")
     per_raw = rec.set_index("raw_row")[["is_duplicate", "is_conflict", "is_kept"]]
     for col in per_raw.columns:
         out[col] = out["raw_row"].map(per_raw[col]).astype(bool)

@@ -11,6 +11,15 @@ import yaml
 
 DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config" / "thresholds.yaml"
 
+# The data-quality approaches. The first value of each is the default (see docs/dq_options.md).
+DQ_OPTIONS = {
+    "clock_offset": ("shift", "exclude"),
+    "drift": ("change_point", "contract"),
+    "fallback": ("row_median", "rescale"),
+    "humidity": ("peers", "self_check"),
+    "sentinel": ("listed", "context"),
+}
+
 
 @dataclass(frozen=True)
 class Config:
@@ -35,8 +44,22 @@ class Window:
     end: dt.date  # inclusive, local
 
 
-def load_config(config_path: Path | str | None, site_path: Path | str) -> Config:
+def load_config(
+    config_path: Path | str | None, site_path: Path | str, overrides: list[str] | None = None
+) -> Config:
+    """`overrides` are "dotted.key=value" strings, e.g. "dq.clock_offset=exclude"."""
     thresholds = yaml.safe_load(Path(config_path or DEFAULT_CONFIG).read_text())
+    for item in overrides or []:
+        key, _, value = item.partition("=")
+        *path, leaf = key.split(".")
+        node = thresholds
+        for k in path:
+            node = node.setdefault(k, {})
+        node[leaf] = yaml.safe_load(value)
+    for name, allowed in DQ_OPTIONS.items():
+        chosen = thresholds.get("dq", {}).get(name)
+        if chosen not in allowed:
+            raise ValueError(f"dq.{name} is {chosen!r}; choose one of {list(allowed)}")
     site = json.loads(Path(site_path).read_text())
     # site.json wins over the config for valid ranges and sentinels
     validation = thresholds.setdefault("validation", {})

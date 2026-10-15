@@ -31,10 +31,11 @@ teammate's unfinished code.
 | --- | --- | --- |
 | `""` | | Usable |
 | `missing` | clean | Blank in the raw file |
-| `sentinel` | clean | Equals a `cfg.thresholds.validation.sentinel_values` key that applies to this measure (`validation.sentinel_measures` scopes a sentinel to its measures; an unlisted sentinel applies to all). Takes precedence over `out_of_range`. |
+| `sentinel` | clean | Equals a `cfg.thresholds.validation.sentinel_values` key that applies to this measure. `dq.sentinel = listed`: `validation.sentinel_measures` scopes a sentinel to its measures (an unlisted sentinel applies to all). `dq.sentinel = context`: it is outside the valid range, or far from its neighbours at the same time (`validation.sentinel_context`). Takes precedence over `out_of_range`. |
 | `out_of_range` | clean | Outside `cfg.thresholds.validation.valid_ranges[measure]`, inclusive bounds |
 | `conflict` | clean | Duplicate records for the same `(timestamp_utc, hub_id)` disagree on this value |
 | `gap` | clean | No record for this interval |
+| `clock_offset` | clean | `dq.clock_offset = exclude` only: the record was written while the hub clock was off (`cleaned.clock_offsets`), so its timestamp is not trusted. Every measure of the record. |
 | `sensor_drift` / `sensor_stuck` | quality | Hub sensor excluded for this period. Hub-level measures only. |
 
 ## 1. Pipeline wiring (`run.py`)
@@ -123,10 +124,11 @@ supplied dataset this gives `365d` = 2025-09-01..2026-08-31 and `180d` =
 | `is_kept` | bool | The one record per `(timestamp_utc, hub_id)` that feeds `canonical` |
 | `<measure>_flag` | str | One per measure, using the reason vocabulary. Blank means OK. |
 | `timestamp_raw_utc` | datetime64[us, UTC] | The timestamp as written in the file |
-| `clock_offset_min` | int64 | Label minus true time for a record in a `clock_offsets` period, else 0. `timestamp_utc`, `timestamp_local` and `local_date` hold the corrected time. |
+| `clock_offset_min` | int64 | Label minus true time for a record in a `clock_offsets` period, else 0. With `dq.clock_offset = shift`, `timestamp_utc`, `timestamp_local` and `local_date` hold the corrected time. With `exclude`, the record keeps its label and every measure gets reason `clock_offset`. |
 
-Clock offsets are fixed before the duplicate and gap logic, because a clock that jumps
-writes some timestamps twice (fake conflicts) and others never (fake gaps).
+Clock offsets are found before the duplicate and gap logic, because a clock that jumps
+writes some timestamps twice (fake conflicts) and others never (fake gaps). `shift` moves
+the records to the true time. `exclude` leaves them, and they never count as conflicts.
 
 ### `cleaned.canonical`: the calculation dataset
 
@@ -162,13 +164,14 @@ Times are true (corrected) UTC, and `end_utc` is exclusive.
 
 | Field | Contents |
 | --- | --- |
-| `canonical` | `cleaned.canonical`, plus `irradiance_used_wm2` (float64), `irradiance_source` (str: `hub`, `row_median` or `none`), and `sensor_excluded` (bool: the hub's irradiance sensor, the one that feeds expected output, is excluded at this interval). For an excluded hub sensor, the `<measure>_reason` columns are set to `sensor_drift` or `sensor_stuck` (a value already flagged keeps its first reason). |
+| `canonical` | `cleaned.canonical`, plus `irradiance_used_wm2` (float64), `irradiance_source` (str: `hub`, `row_median`, `none`, or `hub_corrected` with `dq.fallback = rescale`), and `sensor_excluded` (bool: the hub's irradiance sensor, the one that feeds expected output, is excluded at this interval). For an excluded hub sensor, the `<measure>_reason` columns are set to `sensor_drift` or `sensor_stuck` (a value already flagged keeps its first reason). |
 | `sensor_periods` | `hub_id, sensor, kind (drift/stuck), start_utc, end_utc, evidence`. `sensor` is the measure name (`irradiance_wm2`, `humidity_pct`). `end_utc` is exclusive, and NaT means "until the end of the data". |
 | `comm_outages` | `hub_id, start_utc, end_utc, n_intervals`, for gaps of at least `quality.comm_outage_min_intervals` |
 | `data_quality` | The `data_quality.csv` frame (section 9.1) |
 
-`irradiance_used_wm2` is the hub's own value when it is trusted. Otherwise it is
-the median of the trusted hubs in the same row at that interval (at least
+`irradiance_used_wm2` is the hub's own value when it is trusted. For a drifting sensor with
+`dq.fallback = rescale` it is the hub's own value divided by that day's drift factor (source
+`hub_corrected`). Otherwise it is the median of the trusted hubs in the same row at that interval (at least
 `quality.fallback_min_hubs`). If neither exists, it is NaN with source `none`.
 
 `quality.is_usable(canonical)` is the one definition of a usable panel-interval
@@ -286,7 +289,7 @@ One row per panel per local day, for every day in the data. Windows filter by `d
 | `measured_kwh`, `expected_kwh` | float | |
 | `loss_kwh` | float | `max(expected_kwh - measured_kwh, 0)` |
 | `peer_ratio` | float | Daily median of the interval `peer_ratio` |
-| `irradiance_source` | str | `hub`, `row_median`, `mixed` or `none` |
+| `irradiance_source` | str | `hub`, `hub_corrected`, `row_median`, `mixed` or `none` |
 | `rolling_peer_ratio` | float | decline.py |
 | `decline_slope_pct_per_month` | float | decline.py |
 | `decline_flag` | bool | decline.py |

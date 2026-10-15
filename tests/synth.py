@@ -94,14 +94,16 @@ def make_input(
     hubs_per_row: int = 4,
     edit: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     seed: int = 0,
+    overrides: list[str] | None = None,
 ):
-    """Write a synthetic input folder and return (cfg, inputs)."""
+    """Write a synthetic input folder and return (cfg, inputs). `overrides` are config
+    overrides such as "dq.clock_offset=exclude"."""
     s = site(rows, hubs_per_row)
     wide = readings(s, start, days, seed)
     if edit is not None:
         wide = edit(wide)
     write_input(folder, s, wide)
-    cfg = config.load_config(None, folder / "site.json")
+    cfg = config.load_config(None, folder / "site.json", overrides)
     return cfg, load.load_inputs(folder, cfg)
 
 

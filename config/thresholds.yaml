@@ -2,6 +2,13 @@
 # Values are Phase 1 placeholders; each section's owner refines them.
 # Tuning in Phase 3 changes this file only. Its hash is saved in summary.json.
 
+dq:                             # owner: DQ. Which approach each decision uses: docs/dq_options.md
+  clock_offset: shift           # shift = move the records to the true time | exclude = drop them
+  drift: change_point           # change_point = own baseline + change point | contract = raw ratio, +-10 %
+  fallback: row_median          # row_median = replace a drifting sensor | rescale = its own value / drift
+  humidity: peers               # peers = far from its row | self_check = saturated at 100 % on its own
+  sentinel: listed              # listed = per-measure list below | context = range + neighbours
+
 validation:                     # owner: DQ. site.json wins for any key it also sets.
   valid_ranges:                 # [min, max] inclusive, per measure
     irradiance_wm2: [0, 1500]
@@ -15,6 +22,9 @@ validation:                     # owner: DQ. site.json wins for any key it also 
     "327.6": [temp_c]           # thermistor short (real irradiance can read 327.6)
     "-40.0": [temp_c]           # thermistor open circuit
     "655.35": [current_a]       # ADC overflow on the current channel
+  sentinel_context:             # dq.sentinel = context: a sentinel value inside the valid range is
+    rel_tol: 0.25               # real only when it is within max(rel_tol * neighbour median,
+    abs_tol_range_frac: 0.033   # abs_tol_range_frac * range width) of its neighbours
 
 clean:                          # owner: DQ
   duplicate_keys: [timestamp_utc, hub_id]
@@ -43,12 +53,17 @@ quality:                        # owner: DQ
     rolling_days: 7
     start: change_point         # change_point = move the start back to where the ratio began to move
     min_segment_days: 7         # the change point needs this many days on each side
+    contract_tolerance: 0.10    # dq.drift = contract: raw hub / row median outside 1 +- this
   stuck:
     min_intervals: 16           # identical value this many intervals in a row
     skip_values: [0.0]          # identical runs at these values are normal (irradiance at night)
-    humidity_peer_diff_pp: 20   # daily median humidity this far from the row median = stuck
-    min_days: 3                 # for the humidity rule
-  fallback: row_median          # irradiance substitute for an excluded hub sensor
+    humidity_peer_diff_pp: 20   # dq.humidity = peers: daily median this far from the row median
+    min_days: 3                 # for either humidity rule
+    humidity_stuck_values: [100.0]  # dq.humidity = self_check: readings near these are saturated
+    near_tolerance: 1.0         # within this of a stuck value counts as "at" it
+    day_fraction: 0.5           # a day is saturated when this share of its readings is at it
+    rolling_days: 7             # centered mean of that share
+  fallback_rolling_days: 7      # dq.fallback = rescale: centered window for the daily drift factor
   fallback_min_hubs: 1          # trusted hubs in the row needed for that substitute
 
 expected:                       # owner: EXP

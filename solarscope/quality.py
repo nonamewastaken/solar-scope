@@ -3,13 +3,18 @@
 See docs/contracts.md §4. Steps:
 
 Q1 hub_sensors        one value per hub and interval for each hub-level sensor
-Q2 find_stuck         identical-value runs (any hub sensor), and humidity far from its row
-Q3 find_drift         irradiance ratio to the trusted hubs in the row, against the hub's
-                      own normal ratio; the start is moved back to the change point
+Q2 find_stuck         identical-value runs (any hub sensor), and humidity stuck near 100 %
+                      (dq.humidity: `peers` = far from its row, `self_check` = saturated
+                      on its own)
+Q3 find_drift         irradiance ratio to the trusted hubs in the row (dq.drift:
+                      `change_point` = against the hub's own normal ratio, start moved
+                      back to the change point; `contract` = raw ratio outside +-10 %)
                       (Q2 and Q3 repeat with the hubs found so far left out of the peer
                       medians, so one bad sensor cannot make its neighbours look bad)
 Q4 apply_exclusions   reason sensor_drift / sensor_stuck, sensor_excluded
-Q5 add_irradiance_used  the hub's own value when trusted, else the trusted row median
+Q5 add_irradiance_used  the hub's own value when trusted; else (dq.fallback) the trusted
+                      row median, or for a drifting sensor `rescale` = its own value
+                      divided by the drift factor
 Q6 comm_outages       gaps of at least quality.comm_outage_min_intervals
 Q7 data_quality       one row per hub per window (data_quality.csv)
 """
@@ -28,6 +33,7 @@ from solarscope.load import HUB_MEASURES, PANEL_MEASURES, Inputs
 KEY = ["timestamp_utc", "hub_id"]
 PERIOD_COLUMNS = ["hub_id", "sensor", "kind", "start_utc", "end_utc", "evidence"]
 REASON = {"drift": "sensor_drift", "stuck": "sensor_stuck"}
+NO_FACTORS = pd.DataFrame(columns=["hub_id", "local_date", "factor"])
 DAY = pd.Timedelta(days=1)
 
 
@@ -43,8 +49,10 @@ def assess(cleaned: Cleaned, inputs: Inputs, windows: list[Window], cfg: Config)
     rows = inputs.panels.drop_duplicates("hub_id").set_index("hub_id")["row"]
     hub = hub_sensors(cleaned.canonical)
     periods = find_sensor_periods(hub, rows, cfg)
+    rescale = cfg.thresholds["dq"]["fallback"] == "rescale"
+    factors = drift_factors(hub, rows, periods, cfg) if rescale else NO_FACTORS
     canonical = apply_exclusions(cleaned.canonical, periods)
-    canonical = add_irradiance_used(canonical, cfg)
+    canonical = add_irradiance_used(canonical, cfg, cleaned.canonical["irradiance_wm2"], factors)
     outages = comm_outages(cleaned.gaps, cfg)
     dq = data_quality(cleaned, canonical, periods, outages, windows, inputs, cfg)
     return Quality(canonical, periods, outages, dq)
@@ -158,10 +166,11 @@ def day_runs(flag: pd.Series, min_days: int) -> list[tuple[pd.Timestamp, pd.Time
 
 
 def find_stuck(hub: dict, trusted: dict, rows: pd.Series, cfg: Config) -> pd.DataFrame:
-    return pd.concat(
-        [*(identical_runs(hub[m], m, cfg) for m in hub), humidity_vs_row(hub, trusted, rows, cfg)],
-        ignore_index=True,
-    )
+    if cfg.thresholds["dq"]["humidity"] == "self_check":
+        humidity = humidity_near_stuck(hub, cfg)
+    else:
+        humidity = humidity_vs_row(hub, trusted, rows, cfg)
+    return pd.concat([*(identical_runs(hub[m], m, cfg) for m in hub), humidity], ignore_index=True)
 
 
 def identical_runs(wide: pd.DataFrame, sensor: str, cfg: Config) -> pd.DataFrame:
@@ -241,10 +250,57 @@ def daily_ratio(raw: pd.DataFrame, trusted: pd.DataFrame, rows: pd.Series, hub: 
     return g.median().where(g.size() >= d["min_intervals_per_day"]).dropna()
 
 
+def humidity_near_stuck(hub: dict, cfg: Config) -> pd.DataFrame:
+    """Option 3B, the hub alone (no peers): a day is saturated when at least
+    `day_fraction` of its readings are within `near_tolerance` of a
+    `humidity_stuck_values` value. On a centered `rolling_days` mean of that share,
+    `min_days` days or more in a row make a period, trimmed to its first and last
+    saturated day. Works in a row with one hub; a long real fog would also match."""
+    s = cfg.thresholds["quality"]["stuck"]
+    raw = hub["humidity_pct"]
+    days = local_day(raw.index, cfg)
+    last_day = days.max()
+    out = []
+    for h in raw.columns:
+        x = raw[h]
+        near = pd.Series(False, index=x.index)
+        for v in s["humidity_stuck_values"]:
+            near |= (x - v).abs().le(s["near_tolerance"])
+        frac = near.astype(float).where(x.notna()).groupby(days).mean()
+        smooth = frac.rolling(f"{s['rolling_days']}D", center=True, min_periods=1).mean()
+        hit = smooth.ge(s["day_fraction"]).where(frac.notna())
+        for first, last in day_runs(hit, s["min_days"]):
+            sat = frac.loc[first:last].ge(s["day_fraction"])
+            if not sat.any():
+                continue
+            first, last = sat.index[sat][0], sat.index[sat][-1]
+            share = frac.loc[first:last].mean()
+            out.append(
+                {
+                    "hub_id": h,
+                    "sensor": "humidity_pct",
+                    "kind": "stuck",
+                    "start_utc": day_start_utc(first, cfg),
+                    "end_utc": _end(last, last_day, cfg),
+                    "evidence": f"humidity within {s['near_tolerance']:g} of "
+                    f"{'/'.join(f'{v:g}' for v in s['humidity_stuck_values'])} for "
+                    f"{share:.0%} of readings over {(last - first).days + 1} days",
+                    "severity": np.nan,  # does not depend on peers
+                }
+            )
+    return pd.DataFrame(out, columns=[*PERIOD_COLUMNS, "severity"]) if out else empty_periods()
+
+
 def find_drift(raw: pd.DataFrame, trusted: pd.DataFrame, rows: pd.Series, cfg) -> pd.DataFrame:
-    """Irradiance drift: the hub's ratio to its row, divided by the hub's own normal ratio
-    (its first `baseline_days` days), stays outside 1 ± ratio_tolerance on a
-    `rolling_days` rolling median for `min_days` days."""
+    if cfg.thresholds["dq"]["drift"] == "contract":
+        return _drift_contract(raw, trusted, rows, cfg)
+    return _drift_change_point(raw, trusted, rows, cfg)
+
+
+def _drift_change_point(raw, trusted, rows, cfg) -> pd.DataFrame:
+    """dq.drift = change_point. Irradiance drift: the hub's ratio to its row, divided by
+    the hub's own normal ratio (its first `baseline_days` days), stays outside
+    1 ± ratio_tolerance on a `rolling_days` rolling median for `min_days` days."""
     d = cfg.thresholds["quality"]["drift"]
     out = []
     for h in raw.columns:
@@ -280,6 +336,39 @@ def find_drift(raw: pd.DataFrame, trusted: pd.DataFrame, rows: pd.Series, cfg) -
                 }
             )
             prev_end = last
+    return pd.DataFrame(out, columns=[*PERIOD_COLUMNS, "severity"]) if out else empty_periods()
+
+
+def _drift_contract(raw: pd.DataFrame, trusted: pd.DataFrame, rows: pd.Series, cfg) -> pd.DataFrame:
+    """Irradiance drift as the contract config first had it (option 2B): the hub's raw
+    ratio to its row median, on a `rolling_days` rolling median, outside
+    1 ± ratio_tolerance for `min_days` days. The period starts on the day the rule
+    fires and ends the day after it last fires."""
+    d = cfg.thresholds["quality"]["drift"]
+    out = []
+    for h in raw.columns:
+        ratio = daily_ratio(raw, trusted, rows, h, cfg)
+        if ratio.empty:
+            continue
+        dev = ratio - 1
+        rolling = dev.rolling(f"{d['rolling_days']}D", min_periods=d["min_days"]).median()
+        hit = rolling.abs().gt(d["contract_tolerance"]).where(rolling.notna())
+        for trig, last in day_runs(hit, d["min_days"]):
+            ongoing = last >= ratio.index[-1]
+            peak = rolling.loc[trig:last]
+            peak = peak.loc[peak.abs().idxmax()]
+            out.append(
+                {
+                    "hub_id": h,
+                    "sensor": "irradiance_wm2",
+                    "kind": "drift",
+                    "start_utc": day_start_utc(trig, cfg),
+                    "end_utc": pd.NaT if ongoing else day_start_utc(last + DAY, cfg),
+                    "evidence": f"ratio to row {1 + peak:.3f} (rolling {d['rolling_days']} d), "
+                    f"over ±{d['contract_tolerance']:.0%} from {trig.date()}",
+                    "severity": abs(peak) / d["contract_tolerance"],
+                }
+            )
     return pd.DataFrame(out, columns=[*PERIOD_COLUMNS, "severity"]) if out else empty_periods()
 
 
@@ -361,19 +450,64 @@ def apply_exclusions(canonical: pd.DataFrame, periods: pd.DataFrame) -> pd.DataF
     return out
 
 
-def add_irradiance_used(canonical: pd.DataFrame, cfg: Config) -> pd.DataFrame:
-    """irradiance_used_wm2: the hub's own value when it is usable, else the median of the
-    usable hubs in the same row at that interval, else NaN (source none)."""
+def drift_factors(hub: dict, rows: pd.Series, periods: pd.DataFrame, cfg) -> pd.DataFrame:
+    """Per drifting hub and local day: how far its irradiance reads off (1.20 = 20 % high).
+
+    The daily ratio to the trusted row median, divided by the hub's own normal ratio, on
+    a centered `fallback_rolling_days` median. Days without a ratio (overcast, gaps) are
+    interpolated, so every day of the period has a factor.
+    """
+    q = cfg.thresholds["quality"]
+    irr = hub["irradiance_wm2"]
+    trusted = mask_periods(irr, periods, "irradiance_wm2")
+    last_day = local_day(irr.index, cfg).max()
+    out = []
+    for p in periods[(periods.sensor == "irradiance_wm2") & (periods.kind == "drift")].itertuples():
+        ratio = daily_ratio(irr, trusted, rows, p.hub_id, cfg)
+        base = ratio.iloc[: q["drift"]["baseline_days"]].median()
+        smooth = (
+            (ratio / base)
+            .rolling(f"{q['fallback_rolling_days']}D", center=True, min_periods=1)
+            .median()
+        )
+        first = local_day(pd.DatetimeIndex([p.start_utc]), cfg)[0]
+        last = last_day if pd.isna(p.end_utc) else local_day(pd.DatetimeIndex([p.end_utc]), cfg)[0]
+        days = pd.date_range(first, last, freq="D")
+        f = smooth.reindex(smooth.index.union(days)).interpolate("time").ffill().bfill()
+        out.append(
+            pd.DataFrame({"hub_id": p.hub_id, "local_date": days, "factor": f[days].to_numpy()})
+        )
+    cols = ["hub_id", "local_date", "factor"]
+    return pd.concat(out, ignore_index=True) if out else pd.DataFrame(columns=cols)
+
+
+def add_irradiance_used(
+    canonical: pd.DataFrame, cfg: Config, raw_irradiance: pd.Series, factors: pd.DataFrame
+) -> pd.DataFrame:
+    """irradiance_used_wm2: the hub's own value when it is usable. For a drifting sensor
+    (reason sensor_drift) its own raw value divided by that day's drift factor, source
+    `hub_corrected`. Otherwise the median of the usable hubs in the same row at that
+    interval, else NaN (source none)."""
     q = cfg.thresholds["quality"]
     out = canonical.copy()
+    raw = raw_irradiance.to_numpy()
     hub = out.drop_duplicates(KEY)[[*KEY, "row", "irradiance_wm2"]]
     g = hub.groupby(["timestamp_utc", "row"])["irradiance_wm2"]
     row_med = g.transform("median").where(g.transform("count") >= q["fallback_min_hubs"])
     sub = hub.assign(row_median=row_med)[[*KEY, "row_median"]]
     out = out.merge(sub, on=KEY, how="left")
+    f = out[["hub_id", "local_date"]].merge(factors, on=["hub_id", "local_date"], how="left")
+    corrected = pd.Series(raw / f["factor"].to_numpy(), index=out.index)
+    corrected = corrected.where(out["irradiance_wm2_reason"].eq("sensor_drift"))
     own = out["irradiance_wm2"].notna()
-    out["irradiance_used_wm2"] = out["irradiance_wm2"].where(own, out["row_median"])
-    source = np.where(own, "hub", np.where(out["row_median"].notna(), "row_median", "none"))
+    fixed = ~own & corrected.notna()
+    used = out["irradiance_wm2"].where(own, corrected.where(fixed, out["row_median"]))
+    out["irradiance_used_wm2"] = used
+    source = np.where(
+        own,
+        "hub",
+        np.where(fixed, "hub_corrected", np.where(out["row_median"].notna(), "row_median", "none")),
+    )
     out["irradiance_source"] = pd.Series(source, index=out.index, dtype="str")
     return out.drop(columns="row_median")
 
@@ -495,9 +629,11 @@ def reasons_text(row, hp, outages, offsets, lo_utc, hi_utc, cfg) -> str:
             parts.append(f"{words[p.sensor]} {p.kind} from {p.start_utc.date()}{until}")
     for o in offsets[offsets.hub_id == hub].itertuples():
         if o.start_utc < hi_utc and o.end_utc > lo_utc:
-            parts.append(
-                f"clock {o.offset_min:+d} min fixed {o.start_utc.date()} to {o.end_utc.date()}"
-            )
+            span = f"{o.start_utc.date()} to {o.end_utc.date()}"
+            if cfg.thresholds["dq"]["clock_offset"] == "exclude":
+                parts.append(f"clock {o.offset_min:+d} min, records excluded {span}")
+            else:
+                parts.append(f"clock {o.offset_min:+d} min fixed {span}")
     ho = outages[
         (outages.hub_id == hub) & (outages.start_utc < hi_utc) & (outages.end_utc > lo_utc)
     ]
