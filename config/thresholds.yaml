@@ -60,19 +60,27 @@ classify:                       # owner: CLS
   wiring:
     zero_current_max_a: 0.1
     min_dropouts_per_day: 2
+    max_dropout_intervals: 4    # a dropout is 1-4 intervals; longer zero runs are not wiring
+    min_mate_current_a: 1.0     # hub mates must be producing for a zero to count as a dropout
   hotspot:
     voltage_step_frac: 0.33
     voltage_step_tolerance: 0.08
-    temp_delta_c: 5.0
+    temp_delta_c: 4.0
   snow:
-    snwd_min_in: 0.1
+    snwd_min_in: 0.1            # a gate, not proof: panels shed snow before the ground clears
+    max_row_pr: 0.7             # row median performance ratio below this while snow is on the ground
   soiling:
     min_days: 7
     reset_rain_in: 0.25
+    min_loss_frac: 0.02         # slow loss of 2-10 % against the row's dry-day baseline
+    max_loss_frac: 0.10
   heat:
-    temp_min_c: 50
+    temp_min_c: 50              # back-of-panel median in sun
+    voltage_drop_frac: 0.04     # V below its cool-day level by this much, with PR normal
+    min_pr: 0.9                 # temperature-corrected performance ratio stays normal
   cloud:
     acsh_min_pct: 70
+    min_pr: 0.88                # measured still matches expected at the reduced irradiance
 
 dispatch:                       # owner: CLS
   require_active: true          # only faults still active at the window end
