@@ -46,7 +46,7 @@ def test_weather_and_service_log(cfg):
     assert "STATION" not in w and w["date"].dtype.kind == "M"
     assert w["WT01"].tolist() == [False, True, False]
     s = inputs.service_log
-    assert s["fault_found"].tolist() == [False, True]
+    assert s["fault_found"].tolist() == [False, True, True]
     assert s.loc[0, "panel_list"] == [f"P0{i}" for i in range(1, 7)]  # ALL expanded
     assert s.loc[1, "panel_list"] == ["P05"] and s.loc[1, "hub_list"] == ["H02"]
     assert set(inputs.checksums) == set(load.INPUT_FILES)
