@@ -11,11 +11,22 @@ validation:                     # owner: DQ. site.json wins for any key it also 
     temp_c: [-35, 95]
   sentinel_values: {}           # value -> meaning; filled from site.json
   sentinel_tolerance: 1.0e-6    # |value - sentinel| <= this counts as a sentinel
+  sentinel_measures:            # sentinel -> the measures it applies to. Unlisted = every measure
+    "327.6": [temp_c]           # thermistor short (real irradiance can read 327.6)
+    "-40.0": [temp_c]           # thermistor open circuit
+    "655.35": [current_a]       # ADC overflow on the current channel
 
 clean:                          # owner: DQ
   duplicate_keys: [timestamp_utc, hub_id]
   conflict_keep: none           # none = conflicting values become NaN (reason "conflict")
   gap_min_intervals: 1          # a missing interval counts as a gap from this length
+  clock_offset:                 # a hub clock that runs whole hours off (H02 in April)
+    step_min: 60                # offsets are whole multiples of this
+    tolerance_min: 20           # midday estimate must be this close to a multiple
+    min_days: 2                 # this many offset days in a row make a period
+    min_irradiance_wm2: 50      # daylight, for the midday estimate
+    min_daylight_intervals: 8   # skip days with less daylight than this (hub and peers)
+    min_corr: 0.9               # hub day vs peer curve moved by the offset (rejects frozen sensors)
 
 quality:                        # owner: DQ
   comm_outage_min_intervals: 8  # 2 h with no record = communication outage
