@@ -2,6 +2,13 @@
 # Values are Phase 1 placeholders; each section's owner refines them.
 # Tuning in Phase 3 changes this file only. Its hash is saved in summary.json.
 
+dq:                             # owner: DQ. Which approach each decision uses: docs/dq_options.md
+  clock_offset: shift           # shift = move the records to the true time | exclude = drop them
+  drift: change_point           # change_point = own baseline + change point | contract = raw ratio, +-10 %
+  fallback: row_median          # row_median = replace a drifting sensor | rescale = its own value / drift
+  humidity: peers               # peers = far from its row | self_check = saturated at 100 % on its own
+  sentinel: listed              # listed = per-measure list below | context = range + neighbours
+
 validation:                     # owner: DQ. site.json wins for any key it also sets.
   valid_ranges:                 # [min, max] inclusive, per measure
     irradiance_wm2: [0, 1500]
@@ -11,25 +18,53 @@ validation:                     # owner: DQ. site.json wins for any key it also 
     temp_c: [-35, 95]
   sentinel_values: {}           # value -> meaning; filled from site.json
   sentinel_tolerance: 1.0e-6    # |value - sentinel| <= this counts as a sentinel
+  sentinel_measures:            # sentinel -> the measures it applies to. Unlisted = every measure
+    "327.6": [temp_c]           # thermistor short (real irradiance can read 327.6)
+    "-40.0": [temp_c]           # thermistor open circuit
+    "655.35": [current_a]       # ADC overflow on the current channel
+  sentinel_context:             # dq.sentinel = context: a sentinel value inside the valid range is
+    rel_tol: 0.25               # real only when it is within max(rel_tol * neighbour median,
+    abs_tol_range_frac: 0.033   # abs_tol_range_frac * range width) of its neighbours
 
 clean:                          # owner: DQ
   duplicate_keys: [timestamp_utc, hub_id]
   conflict_keep: none           # none = conflicting values become NaN (reason "conflict")
   gap_min_intervals: 1          # a missing interval counts as a gap from this length
+  clock_offset:                 # a hub clock that runs whole hours off (H02 in April)
+    step_min: 60                # offsets are whole multiples of this
+    tolerance_min: 20           # midday estimate must be this close to a multiple
+    min_days: 2                 # this many offset days in a row make a period
+    min_irradiance_wm2: 50      # daylight, for the midday estimate
+    min_daylight_intervals: 8   # skip days with less daylight than this (hub and peers)
+    min_corr: 0.9               # hub day vs peer curve moved by the offset (rejects frozen sensors)
 
 quality:                        # owner: DQ
   comm_outage_min_intervals: 8  # 2 h with no record = communication outage
   peer_group: row               # hub sensors are compared with hubs in the same row
-  min_peer_hubs: 2
+  min_peer_hubs: 2              # trusted peers needed to judge a hub sensor
+  max_passes: 5                 # passes; each confirms the worst hub per row and drops it from peer medians
+  merge_gap_h: 24               # periods of one sensor less than this apart are one period
   drift:
     min_irradiance_wm2: 200     # compare sensors only in daylight
-    ratio_tolerance: 0.10       # hub / row median outside 1 +- this = drifting
+    min_intervals_per_day: 8    # daylight intervals needed for a daily ratio
+    baseline_days: 30           # the hub's first days with a ratio = its own normal ratio to the row
+    ratio_tolerance: 0.05       # rolling ratio / own normal ratio outside 1 +- this = drifting
     min_days: 3                 # sustained this long before excluding
     rolling_days: 7
+    start: change_point         # change_point = move the start back to where the ratio began to move
+    min_segment_days: 7         # the change point needs this many days on each side
+    contract_tolerance: 0.10    # dq.drift = contract: raw hub / row median outside 1 +- this
   stuck:
     min_intervals: 16           # identical value this many intervals in a row
-    humidity_stuck_values: [100.0]
-  fallback: row_median          # irradiance substitute for an excluded hub sensor
+    skip_values: [0.0]          # identical runs at these values are normal (irradiance at night)
+    humidity_peer_diff_pp: 20   # dq.humidity = peers: daily median this far from the row median
+    min_days: 3                 # for either humidity rule
+    humidity_stuck_values: [100.0]  # dq.humidity = self_check: readings near these are saturated
+    near_tolerance: 1.0         # within this of a stuck value counts as "at" it
+    day_fraction: 0.5           # a day is saturated when this share of its readings is at it
+    rolling_days: 7             # centered mean of that share
+  fallback_rolling_days: 7      # dq.fallback = rescale: centered window for the daily drift factor
+  fallback_min_hubs: 1          # trusted hubs in the row needed for that substitute
 
 expected:                       # owner: EXP
   min_irradiance_wm2: 50        # skip intervals below this
