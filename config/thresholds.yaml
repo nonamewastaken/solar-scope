@@ -31,16 +31,25 @@ clean:                          # owner: DQ
 quality:                        # owner: DQ
   comm_outage_min_intervals: 8  # 2 h with no record = communication outage
   peer_group: row               # hub sensors are compared with hubs in the same row
-  min_peer_hubs: 2
+  min_peer_hubs: 2              # trusted peers needed to judge a hub sensor
+  max_passes: 5                 # passes; each confirms the worst hub per row and drops it from peer medians
+  merge_gap_h: 24               # periods of one sensor less than this apart are one period
   drift:
     min_irradiance_wm2: 200     # compare sensors only in daylight
-    ratio_tolerance: 0.10       # hub / row median outside 1 +- this = drifting
+    min_intervals_per_day: 8    # daylight intervals needed for a daily ratio
+    baseline_days: 30           # the hub's first days with a ratio = its own normal ratio to the row
+    ratio_tolerance: 0.05       # rolling ratio / own normal ratio outside 1 +- this = drifting
     min_days: 3                 # sustained this long before excluding
     rolling_days: 7
+    start: change_point         # change_point = move the start back to where the ratio began to move
+    min_segment_days: 7         # the change point needs this many days on each side
   stuck:
     min_intervals: 16           # identical value this many intervals in a row
-    humidity_stuck_values: [100.0]
+    skip_values: [0.0]          # identical runs at these values are normal (irradiance at night)
+    humidity_peer_diff_pp: 20   # daily median humidity this far from the row median = stuck
+    min_days: 3                 # for the humidity rule
   fallback: row_median          # irradiance substitute for an excluded hub sensor
+  fallback_min_hubs: 1          # trusted hubs in the row needed for that substitute
 
 expected:                       # owner: EXP
   min_irradiance_wm2: 50        # skip intervals below this
