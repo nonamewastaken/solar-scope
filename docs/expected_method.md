@@ -1,6 +1,6 @@
 # Expected output: formula, assumptions, peer method
 
-Status: draft for review (SOL-13). Owner: Khang (EXP). If this file and
+Status: v1, merged 2026-10-15 (SOL-13). Owner: Khang (EXP). If this file and
 `docs/contracts.md` disagree, `contracts.md` wins. Every number below lives in
 `config/thresholds.yaml` or `site.json`, never in code.
 

@@ -1,6 +1,6 @@
 # readings.csv data profile
 
-Status: **draft for team review** (SOL-12). Owner: Member 2 (Data Quality).
+Status: v1, merged 2026-10-15 (SOL-12). Owner: dtri (Data Quality).
 Source: `SolarScope_MVP1_TestData_Studio/readings.csv`.
 Reproduce every number here with:
 
@@ -242,6 +242,6 @@ These need agreement, mostly with Khang, because they touch `contracts.md` or `c
 
 ## Next
 
-- Hand-write the cleaned and quality fixtures in `tests/fixtures/cleaned/` and
-  `tests/fixtures/quality/`, including `data_quality.csv`, so Member 3 can build against them.
-- Add fixture edge cases for cases 10–12, which the current fixture does not cover.
+Done. `clean.py` and `quality.py` are merged; `tests/fixtures/results/data_quality.csv` is
+`quality.py` output on the fixture readings, and cases 10–12 are covered by synthetic tests
+(`tests/synth.py`) in `test_clean.py` and `test_quality.py`.
