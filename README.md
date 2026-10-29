@@ -42,7 +42,7 @@ uv run pytest
 uv run run.py --input input/mvp1 --output output
 ```
 
-The input folder holds `readings.csv`, `site.json`, `weather.csv` and `service_log.csv`. Thresholds live in `config/thresholds.yaml` (`--config` to use another). That single command runs the whole pipeline and writes the reports to the output folder. Without uv: `pip install -r requirements.txt`.
+The input folder holds `readings.csv`, `site.json`, `weather.csv` and `service_log.csv`. Thresholds live in `config/thresholds.yaml` (`--config` to use another). When the pipeline is complete (Phase 2), that one command writes the result files and both PDFs to the output folder. Today it runs stages 1-3 and prints usable data per hub. Without uv: `pip install -r requirements.txt`.
 
 ---
 
@@ -55,7 +55,7 @@ Two reports are generated, one covering the last **180 days** and one covering t
 | Page | Contents |
 | --- | --- |
 | **1. Summary** | Total kWh lost, split into fault and weather, plus the top 3 findings |
-| **2. Fault or Weather** | Every output drop, its label (fault or weather), and the kWh it cost |
+| **2. Fault or Weather** | kWh lost by label and cause, and the top events (full list in `events.csv`) |
 | **3. Dispatch List** | Each panel that needs a truck, the likely cause, and the evidence |
 | **4. Repeat Repairs** | Panels that keep getting fixed, with the root cause, using the service log |
 | **5. Early Warnings** | Panels in slow decline and how fast they are dropping |
@@ -63,41 +63,28 @@ Two reports are generated, one covering the last **180 days** and one covering t
 
 ### Results files
 
-Five results files are written alongside the PDFs. **Every number in the reports comes from these files**, so any figure in a PDF can be traced back to its source.
+`data_quality.csv`, `panel_daily.csv`, `events.csv`, `dispatch.csv` and `summary.json` are written alongside the PDFs. **Every number in the reports comes from these files.**
 
 ### Scorecard
 
-The scorecard checks the analysis against SolarScope's answer key:
-
-- Faults caught
-- False alarms
-- Truck rolls avoided
-- Days of early warning
+`scripts/score.py` (Phase 2) checks the results against the answer key, once, after thresholds are frozen: faults caught, false alarms, truck rolls avoided, days of early warning.
 
 ---
 
 ## How it works
 
-The pipeline runs in 6 steps, one Python module per step. Each step feeds the next.
+Six stages, one module each, chained by `run.py`. Stage inputs and outputs are fixed in [`docs/contracts.md`](docs/contracts.md).
 
-```
- Raw hub data ──► Clean & validate ──► Fault vs weather ──► Dispatch
-                                              │
-                                              ├──► Repeat repairs (service log)
-                                              ├──► Early warnings
-                                              └──► Reports + scorecard
-```
+| # | Stage | Module | Job |
+| --- | --- | --- | --- |
+| 1 | Load | `load.py`, `config.py` | Read the 4 input files, convert time zones, reshape to one row per panel |
+| 2 | Clean | `clean.py` | Flag duplicates, conflicts, sentinels, out-of-range values, gaps and clock offsets |
+| 3 | Quality | `quality.py` | Find drifting or stuck hub sensors, pick the irradiance to trust, score usable data per hub |
+| 4 | Expected | `expected.py`, `decline.py` | Expected output (physics + peer panels), kWh lost, slow decline |
+| 5 | Classify | `classify.py`, `dispatch.py` | Group losses into events, label fault / weather / sensor / data, build the dispatch list |
+| 6 | Report | `servicelog.py`, `summary.py`, `report.py` | Repeat repairs and avoidable truck rolls, `summary.json`, the 2 PDFs |
 
-| Step | Job |
-| --- | --- |
-| 1. Load and clean | Read raw hub data, measure usable data percent, exclude hubs that fail the quality rules |
-| 2. Classify drops | Compare each panel against its hub and the weather to label every drop as fault or weather |
-| 3. Dispatch list | Rank panels that need a truck, with likely cause and evidence |
-| 4. Repeat repairs | Match panels against the service log to find fixes that did not hold |
-| 5. Early warnings | Detect slow decline and estimate the rate of loss |
-| 6. Report | Build the results files, the PDFs, and the scorecard |
-
-A flowsheet diagram of the pipeline is in `docs/` and matches the code.
+Every tunable number is in `config/thresholds.yaml`. Data-quality choices are switchable per run (`--set dq.clock_offset=exclude`, see [`docs/dq_options.md`](docs/dq_options.md)).
 
 ---
 
@@ -105,40 +92,60 @@ A flowsheet diagram of the pipeline is in `docs/` and matches the code.
 
 ```
 solar-scope/
-├── run.py             # Entry point: runs the full pipeline
-├── solarscope/        # One module per stage (see docs/contracts.md)
-├── config/            # thresholds.yaml: every tunable number
-├── input/             # Datasets, e.g. input/mvp1 (not committed; get it from the team)
-├── output/            # Run results (not committed)
-├── pyproject.toml     # Project config and dependencies
-├── uv.lock            # Locked dependency versions
-├── requirements.txt   # Same pins, for pip users (uv export)
-├── .python-version    # Python 3.14.7
-├── docs/              # contracts.md, method notes and process flowsheet
-└── tests/             # One test group per pipeline step, fixtures/ dataset
+├── run.py                    # Entry point (stages 1-3 wired so far)
+├── solarscope/
+│   ├── config.py             # thresholds.yaml + site.json, config hash, report windows
+│   ├── load.py               # Stage 1
+│   ├── clean.py              # Stage 2
+│   ├── quality.py            # Stage 3
+│   ├── servicelog.py         # Stage 6: repeat repairs, visit tagging
+│   ├── report.py             # Stage 6: 6-page PDF per window from the result files
+│   └── results.py            # Result-file schemas, atomic writes
+├── config/thresholds.yaml    # Every tunable number, one section per stage
+├── scripts/                  # Analysis tools, not part of the pipeline
+│   ├── profile_readings.py   #   data profile behind docs/data_profile.md
+│   ├── catalog_signatures.py #   fault/weather plots behind docs/signatures.md
+│   ├── inject_faults.py      #   plant synthetic faults in a copy of the data
+│   ├── dq_eval.py            #   score data-quality rules on planted faults
+│   └── dq_compare.py         #   compare the dq.* approaches
+├── docs/
+│   ├── contracts.md          # Stage inputs/outputs and the 5 result files (agreed v1)
+│   ├── SYSTEM_OVERVIEW.txt   # Full design, module map, team plan
+│   ├── expected_method.md    # Expected-output formula and hand calculation
+│   ├── signatures.md         # Fault and weather signatures = classify rules
+│   ├── data_profile.md       # What is messy in readings.csv
+│   ├── dq_options.md         # Data-quality approaches and evidence
+│   └── SolarScope_Tech_Studio_Brief_MVP1.pdf
+├── tests/
+│   ├── test_*.py             # One file per module
+│   └── fixtures/             # 2-hub x 3-day dataset, hand calc, sample result folder (see its README)
+├── input/                    # Datasets, e.g. input/mvp1 (not committed)
+└── output/                   # Run results (not committed)
 ```
+
+The answer key is never committed (the repo is public). It stays outside version control and is read only by the scorecard.
 
 ---
 
 ## Testing
 
-There is a passing test group for each of the 6 steps. Expected outputs are checked against a hand calculation and must agree within **2%**.
-
 ```bash
-uv run pytest
+uv run ruff format . && uv run ruff check . && uv run pytest
 ```
 
----
-
-## Data quality
-
-SolarScope does not assume the data is good. Page 6 of every report shows the usable data percent for each hub. A hub that falls below the quality threshold is excluded from the analysis, and the report says so and why. Nothing is silently dropped.
+CI runs the same three commands on every push and pull request. Expected output is checked against a hand calculation (`tests/fixtures/handcalc/`) within **2%**.
 
 ---
 
 ## Status
 
-Built as the shared reference project for the Tech Studio. Work lands here after each weekly session.
+| Phase | Scope | State |
+| --- | --- | --- |
+| 1 · Setup | Repo, CI, contracts, fixtures, config, load, clean, quality, method docs, servicelog, report layout | Done |
+| 2 · Build | `expected.py`, `classify.py`, `dispatch.py`, `summary.py`, full `run.py`, load validation, scorecard | Next |
+| 3 · Integrate & tune | Decline, threshold review, full-dataset run, flowsheet, single scoring run | Planned |
+
+Data quality: dtri. Everything else: Khang.
 
 ## License
 

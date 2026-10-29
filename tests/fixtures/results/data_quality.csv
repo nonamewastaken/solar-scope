@@ -1,5 +1,5 @@
 window,window_start,window_end,hub_id,row,expected_intervals,received_records,usable_pct,n_duplicate,n_conflict,n_missing,n_sentinel,n_out_of_range,n_gap_intervals,n_sensor_excluded_intervals,excluded_periods,reasons
-365d,2024-11-04,2025-11-03,H01,R1,35040,293,0.83,1,0,1,1,1,0,0,,"1 duplicate, 1 sentinel, 1 out of range, 1 missing"
-365d,2024-11-04,2025-11-03,H02,R1,35040,289,0.82,0,2,1,1,1,4,0,,"1 conflict (2 records), 1 sentinel, 1 out of range, 1 missing, 4 gap intervals"
-180d,2025-05-08,2025-11-03,H01,R1,17284,293,1.68,1,0,1,1,1,0,0,,"1 duplicate, 1 sentinel, 1 out of range, 1 missing"
-180d,2025-05-08,2025-11-03,H02,R1,17284,289,1.66,0,2,1,1,1,4,0,,"1 conflict (2 records), 1 sentinel, 1 out of range, 1 missing, 4 gap intervals"
+365d,2024-11-04,2025-11-03,H01,R1,35040,293,0.8304794520547946,1,0,1,1,1,0,292,humidity_pct:stuck:2025-11-01T00:00:00-04:00/2025-11-04T00:00:00-05:00,humidity stuck from 2025-11-01 to 2025-11-04; 1 sentinel values
+365d,2024-11-04,2025-11-03,H02,R1,35040,289,0.8200152207001522,0,2,1,1,1,4,292,humidity_pct:stuck:2025-11-01T00:00:00-04:00/2025-11-04T00:00:00-05:00,humidity stuck from 2025-11-01 to 2025-11-04; 2 conflicting records; 1 sentinel values
+180d,2025-05-08,2025-11-03,H01,R1,17284,293,1.6836380467484378,1,0,1,1,1,0,292,humidity_pct:stuck:2025-11-01T00:00:00-04:00/2025-11-04T00:00:00-05:00,humidity stuck from 2025-11-01 to 2025-11-04; 1 sentinel values
+180d,2025-05-08,2025-11-03,H02,R1,17284,289,1.662423821646224,0,2,1,1,1,4,292,humidity_pct:stuck:2025-11-01T00:00:00-04:00/2025-11-04T00:00:00-05:00,humidity stuck from 2025-11-01 to 2025-11-04; 2 conflicting records; 1 sentinel values

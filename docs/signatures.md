@@ -1,6 +1,6 @@
 # Signature catalog
 
-Status: draft for review (SOL-14). Owner: Khang (CLS).
+Status: v1, merged 2026-10-15 (SOL-14). Owner: Khang (CLS).
 These are the rules `classify.py` starts from. Every number is a key in `config/thresholds.yaml`
 under `classify:`. The answer key was not opened. The only sources are `input/mvp1` and
 `scripts/catalog_signatures.py`.

@@ -185,8 +185,8 @@ run.py                     all    Khang     One-command entry point, run ID, log
 solarscope/config.py       1      Khang     Load config + site.json, config hash, windows
 solarscope/results.py      all    Khang     Result-file schemas, safe (atomic) writes
 solarscope/load.py         1      Khang     Read, validate, convert time, reshape
-solarscope/clean.py        2      Member 2  Flag duplicates, gaps, sentinels, ranges
-solarscope/quality.py      3      Member 2  Usable %, sensor drift/stuck, exclusion,
+solarscope/clean.py        2      dtri      Flag duplicates, gaps, sentinels, ranges
+solarscope/quality.py      3      dtri      Usable %, sensor drift/stuck, exclusion,
                                             irradiance fallback
 solarscope/expected.py     4      Khang     Energy, physics + peer baselines, losses
 solarscope/decline.py      4b     Khang     Slow-decline detection
@@ -287,23 +287,27 @@ reruns the pipeline on a fresh dataset.
 SolarScope/
 |-- run.py
 |-- solarscope/
-|   |-- config.py   results.py   load.py
-|   |-- clean.py    quality.py
-|   |-- expected.py decline.py
-|   |-- classify.py dispatch.py
-|   `-- servicelog.py summary.py report.py
+|   |-- config.py   results.py   load.py          (done)
+|   |-- clean.py    quality.py                    (done)
+|   |-- servicelog.py report.py                   (done; report reads the fixture folder)
+|   |-- expected.py decline.py                    (Phase 2-3)
+|   |-- classify.py dispatch.py summary.py        (Phase 2)
 |-- scripts/
-|   `-- score.py
+|   |-- profile_readings.py catalog_signatures.py (analysis, not pipeline)
+|   |-- inject_faults.py dq_eval.py dq_compare.py (DQ evaluation)
+|   `-- score.py                                  (Phase 2)
 |-- config/
 |   `-- thresholds.yaml
 |-- docs/
-|   |-- contracts.md
-|   `-- flowsheet (diagram matching the code)
+|   |-- contracts.md  SYSTEM_OVERVIEW.txt
+|   |-- expected_method.md  signatures.md  data_profile.md  dq_options.md
+|   `-- flowsheet (diagram matching the code, Phase 3)
 |-- tests/
-|   `-- fixtures/
-|-- input/            (not committed if large)
+|   |-- test_<module>.py
+|   `-- fixtures/  raw/ loaded/ handcalc/ results/
+|-- input/            (not committed)
 |-- output/           (not committed)
-|-- requirements.txt
+|-- pyproject.toml  uv.lock  requirements.txt
 `-- README.md
 
 The answer key folder stays outside the repo and is listed in .gitignore. Only the
@@ -335,7 +339,7 @@ Workstreams (Linear label = owner):
 
   INT  Lead / Integration  Khang     run.py, config.py, results.py, load.py,
                                      contracts, score.py, README, flowsheet
-  DQ   Data Quality        Member 2  clean.py, quality.py
+  DQ   Data Quality        dtri      clean.py, quality.py
   EXP  Expected Output     Khang     expected.py, decline.py
   CLS  Classification      Khang     classify.py, dispatch.py
   RPT  Reports             Khang     servicelog.py, summary.py, report.py
