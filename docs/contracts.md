@@ -1,8 +1,8 @@
 # SolarScope MVP 1: Stage Contracts
 
-Status: **draft v1 (2026-10-04), waiting for owner review** (SOL-8).
-Each owner reviews their stage's input and output. Agree, or comment on the Linear
-issue. After review, a change to this file needs a PR that every affected owner approves.
+Status: **agreed v1 (2026-10-29)** (SOL-8). Owners: Khang (load, expected, decline,
+classify, dispatch, service log, summary, report), dtri (clean, quality).
+A change to this file needs a PR that every affected owner approves.
 
 Build against the fixtures in `tests/fixtures/` (see its README), not against a
 teammate's unfinished code.
@@ -109,7 +109,7 @@ local day in the data, and each window is the `days` days ending on it. On the
 supplied dataset this gives `365d` = 2025-09-01..2026-08-31 and `180d` =
 2026-03-05..2026-08-31.
 
-## 3. Stage 2: clean (`clean.py`, owner Member 2)
+## 3. Stage 2: clean (`clean.py`, owner dtri)
 
 **Input:** `inputs`, `cfg`. **Output:** `clean.Cleaned`:
 
@@ -158,7 +158,7 @@ intervals. `end_utc` is exclusive.
 which a hub clock ran a whole multiple of `clean.clock_offset.step_min` off its row.
 Times are true (corrected) UTC, and `end_utc` is exclusive.
 
-## 4. Stage 3: quality (`quality.py`, owner Member 2)
+## 4. Stage 3: quality (`quality.py`, owner dtri)
 
 **Input:** `cleaned`, `inputs`, `windows`, `cfg`. **Output:** `quality.Quality`:
 
@@ -178,7 +178,7 @@ Times are true (corrected) UTC, and `end_utc` is exclusive.
 (V, I and T usable, and `irradiance_source != none`). `data_quality.usable_pct` uses
 it, and `expected.py` should use it for `is_usable`, so the rule is written once.
 
-## 5. Stage 4: expected (`expected.py`, owner Member 3)
+## 5. Stage 4: expected (`expected.py`, owner Khang)
 
 **Input:** `qual`, `inputs`, `cfg`. **Output:** `expected.Expected`:
 
@@ -201,7 +201,7 @@ The `qual.canonical` columns, plus:
 The base columns of `panel_daily.csv` (section 9.2). The decline columns are NaN or
 False, and `daily_label` is `""`.
 
-## 6. Stage 4b: decline (`decline.py`, owner Member 3)
+## 6. Stage 4b: decline (`decline.py`, owner Khang)
 
 **Input:** `exp.panel_daily`, `inputs`, `qual`, `cfg`.
 **Output:** `(panel_daily, warnings)`.
@@ -211,7 +211,7 @@ False, and `daily_label` is `""`.
 - `warnings` has one row per flagged panel: `panel_id, hub_id, row, first_flag_date,
   decline_rate_pct_per_month, current_deficit_pct, projected_10pct_date, evidence`.
 
-## 7. Stage 5: classify and dispatch (`classify.py`, `dispatch.py`, owner Member 4)
+## 7. Stage 5: classify and dispatch (`classify.py`, `dispatch.py`, owner Khang)
 
 `classify.classify(exp, panel_daily, warnings, qual, inputs, cfg) -> (events, panel_daily)`
 
@@ -237,19 +237,22 @@ pass the `dispatch` rules in the config.
 
 `daily_label` uses these labels, plus `normal`.
 
-## 8. Stage 6: service log, summary, report (owner Member 5)
+## 8. Stage 6: service log, summary, report (owner Khang)
 
 `servicelog.analyze(service_log, events, windows, cfg) -> servicelog.ServiceLog`:
 
 | Field | Contents |
 | --- | --- |
-| `visits` | One row per ticket. Has the `service_log` columns, plus `matched_event_ids` (`list[str]`), `explained_by` (the label of the best match, or `""`), and `avoidable` (bool). A visit is avoidable when it found no fault and the pipeline explains it with a non-fault event. |
-| `repeat_repairs` | `panel_id, hub_id, n_repairs, ticket_ids (list), visit_dates (list), root_cause, permanent_fix`. Only panels where `fault_found` is Y more than once. |
+| `visits` | One row per ticket. Has the `service_log` columns, plus `matched_event_ids` (`list[str]`: events that overlap `[visit_date - servicelog.match_window_days, visit_date]` and share a panel), `explained_by` (the label of the matched event with the most `kwh_lost`, or `""`), and `avoidable` (bool). A visit is avoidable when it found no fault, its `trigger` is not `scheduled`, and `explained_by` is in `servicelog.avoidable_labels` (`[weather]`). |
+| `repeat_repairs` | `panel_id, hub_id, n_repairs, ticket_ids (list), visit_dates (list), root_cause, permanent_fix`. Panels with at least `servicelog.repeat_min_repairs` visits with `fault_found` in the same `category`. `root_cause` is from the latest repair, and `permanent_fix` is `servicelog.permanent_fix[category]`. Not filtered by window. |
 
-`summary.build(...) -> dict` gives the `summary.json` content (section 9.5).
+`summary.build(...) -> dict` gives the `summary.json` content (section 9.5). A window's
+`repeat_repairs` lists a panel when any of its repairs falls in the window, with its full
+history.
 
 `report.render(results_dir) -> list[Path]` reads only the 5 result files. It writes
-`report_<window>.pdf`, with 6 pages per window.
+`report_<window>.pdf`, with exactly 6 pages per window. Tables have a row cap, and page 2
+lists the top events by kWh plus the totals (full list: `events.csv`).
 
 ## 9. The 5 official result files
 
@@ -268,7 +271,7 @@ One row per hub per window.
 | `hub_id`, `row` | str | |
 | `expected_intervals` | int | 15-minute intervals in the window. DST aware: 35040 for 365 days. |
 | `received_records` | int | Raw records, including duplicates |
-| `usable_pct` | float | 100 × usable panel-intervals ÷ (expected_intervals × panels on the hub). See `exp.intervals.is_usable`. |
+| `usable_pct` | float | 100 × usable panel-intervals ÷ (expected_intervals × panels on the hub). See `quality.is_usable`. |
 | `n_duplicate` | int | Records with `is_duplicate` |
 | `n_conflict` | int | Records with `is_conflict` |
 | `n_missing`, `n_sentinel`, `n_out_of_range` | int | Flagged values. Hub-level measures count once per record. |

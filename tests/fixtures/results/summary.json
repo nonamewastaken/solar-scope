@@ -3,8 +3,15 @@
   "run_id": "20251104T000000Z-fixture",
   "generated_at_utc": "2025-11-04T00:00:00Z",
   "site_id": "SS-FIXTURE-001",
-  "config_hash": "31bd1d050bb9e5d4adb57c081b3bea20e968a745f9aed0ec096f280c8db1c684",
+  "config_hash": "d4e77dbdb2fe5e3790fbfb3552eb4eb95cbe7ea4ca15cbb3f4a40a3e9946f620",
   "config": {
+    "dq": {
+      "clock_offset": "shift",
+      "drift": "change_point",
+      "fallback": "row_median",
+      "humidity": "peers",
+      "sentinel": "listed"
+    },
     "validation": {
       "valid_ranges": {
         "irradiance_wm2": [
@@ -34,7 +41,22 @@
         "-40.0": "thermistor open circuit",
         "327.6": "thermistor short"
       },
-      "sentinel_tolerance": 1e-06
+      "sentinel_tolerance": 1e-06,
+      "sentinel_measures": {
+        "327.6": [
+          "temp_c"
+        ],
+        "-40.0": [
+          "temp_c"
+        ],
+        "655.35": [
+          "current_a"
+        ]
+      },
+      "sentinel_context": {
+        "rel_tol": 0.25,
+        "abs_tol_range_frac": 0.033
+      }
     },
     "clean": {
       "duplicate_keys": [
@@ -42,25 +64,49 @@
         "hub_id"
       ],
       "conflict_keep": "none",
-      "gap_min_intervals": 1
+      "gap_min_intervals": 1,
+      "clock_offset": {
+        "step_min": 60,
+        "tolerance_min": 20,
+        "min_days": 2,
+        "min_irradiance_wm2": 50,
+        "min_daylight_intervals": 8,
+        "min_corr": 0.9
+      }
     },
     "quality": {
       "comm_outage_min_intervals": 8,
       "peer_group": "row",
       "min_peer_hubs": 2,
+      "max_passes": 5,
+      "merge_gap_h": 24,
       "drift": {
         "min_irradiance_wm2": 200,
-        "ratio_tolerance": 0.1,
+        "min_intervals_per_day": 8,
+        "baseline_days": 30,
+        "ratio_tolerance": 0.05,
         "min_days": 3,
-        "rolling_days": 7
+        "rolling_days": 7,
+        "start": "change_point",
+        "min_segment_days": 7,
+        "contract_tolerance": 0.1
       },
       "stuck": {
         "min_intervals": 16,
+        "skip_values": [
+          0.0
+        ],
+        "humidity_peer_diff_pp": 20,
+        "min_days": 3,
         "humidity_stuck_values": [
           100.0
-        ]
+        ],
+        "near_tolerance": 1.0,
+        "day_fraction": 0.5,
+        "rolling_days": 7
       },
-      "fallback": "row_median"
+      "fallback_rolling_days": 7,
+      "fallback_min_hubs": 1
     },
     "expected": {
       "min_irradiance_wm2": 50,
@@ -98,25 +144,33 @@
       },
       "wiring": {
         "zero_current_max_a": 0.1,
-        "min_dropouts_per_day": 2
+        "min_dropouts_per_day": 2,
+        "max_dropout_intervals": 4,
+        "min_mate_current_a": 1.0
       },
       "hotspot": {
         "voltage_step_frac": 0.33,
         "voltage_step_tolerance": 0.08,
-        "temp_delta_c": 5.0
+        "temp_delta_c": 4.0
       },
       "snow": {
-        "snwd_min_in": 0.1
+        "snwd_min_in": 0.1,
+        "max_row_pr": 0.7
       },
       "soiling": {
         "min_days": 7,
-        "reset_rain_in": 0.25
+        "reset_rain_in": 0.25,
+        "min_loss_frac": 0.02,
+        "max_loss_frac": 0.1
       },
       "heat": {
-        "temp_min_c": 50
+        "temp_min_c": 50,
+        "voltage_drop_frac": 0.04,
+        "min_pr": 0.9
       },
       "cloud": {
-        "acsh_min_pct": 70
+        "acsh_min_pct": 70,
+        "min_pr": 0.88
       }
     },
     "dispatch": {
@@ -131,7 +185,15 @@
     },
     "servicelog": {
       "match_window_days": 7,
-      "repeat_min_repairs": 2
+      "repeat_min_repairs": 2,
+      "avoidable_labels": [
+        "weather"
+      ],
+      "permanent_fix": {
+        "wiring": "Replace both connector halves with a matched pair from one maker",
+        "string_outage": "Replace fuse holder; inspect combiner for heat damage",
+        "hotspot": "Replace module under warranty"
+      }
     },
     "report_windows": {
       "end_date": null,

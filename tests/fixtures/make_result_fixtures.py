@@ -4,15 +4,16 @@ Run from the repo root after make_fixtures.py:
     PYTHONPATH=. uv run python tests/fixtures/make_result_fixtures.py
 
 These are FORMAT and CONSISTENCY fixtures. They follow docs/contracts.md section 9 column for
-column and agree with each other (see tests/test_result_fixtures.py), but they are not derived
-from the fixture readings. Do not edit the output by hand.
+column and agree with each other (see tests/test_result_fixtures.py). data_quality.csv is the
+real quality.py output on the fixture readings; the other files are not derived from them.
+Do not edit the output by hand.
 """
 
 from pathlib import Path
 
 import pandas as pd
 
-from solarscope import config, load, results
+from solarscope import clean, config, load, quality, results
 
 FIX = Path(__file__).parent
 RAW = FIX / "raw"
@@ -96,36 +97,9 @@ def dispatch(windows) -> pd.DataFrame:
     } for w in windows], columns=results.SCHEMAS["dispatch"])  # fmt: skip
 
 
-def data_quality(windows) -> pd.DataFrame:
-    # Placeholder until dtri's tests/fixtures/quality/data_quality.csv lands.
-    # Per-hub counts are the edge-case table in tests/fixtures/README.md.
-    hubs = {
-        "H01": dict(row="R1", received=293, usable=873, n_duplicate=1, n_conflict=0,
-                    n_missing=1, n_sentinel=1, n_out_of_range=1, n_gap=0,
-                    reasons="1 duplicate, 1 sentinel, 1 out of range, 1 missing"),
-        "H02": dict(row="R1", received=289, usable=862, n_duplicate=0, n_conflict=2,
-                    n_missing=1, n_sentinel=1, n_out_of_range=1, n_gap=4,
-                    reasons="1 conflict (2 records), 1 sentinel, 1 out of range, 1 missing, "
-                            "4 gap intervals"),
-    }  # fmt: skip
-    rows = []
-    for w in windows:
-        # 96 per day; the fall-back day (2025-11-02) adds 4 and the spring-forward day
-        # (2025-03-09) removes 4, so the 365d window nets 35040 and 180d is 17284.
-        n = w.days * 96 + 4 - (4 if str(w.start) <= "2025-03-09" else 0)
-        for h, c in hubs.items():
-            rows.append({
-                "window": w.name, "window_start": str(w.start), "window_end": str(w.end),
-                "hub_id": h, "row": c["row"], "expected_intervals": n,
-                "received_records": c["received"],
-                "usable_pct": round(100 * c["usable"] / (n * 3), 2),
-                "n_duplicate": c["n_duplicate"], "n_conflict": c["n_conflict"],
-                "n_missing": c["n_missing"], "n_sentinel": c["n_sentinel"],
-                "n_out_of_range": c["n_out_of_range"], "n_gap_intervals": c["n_gap"],
-                "n_sensor_excluded_intervals": 0,
-                "excluded_periods": "", "reasons": c["reasons"],
-            })  # fmt: skip
-    return pd.DataFrame(rows, columns=results.SCHEMAS["data_quality"])
+def data_quality(cfg, inputs, windows) -> pd.DataFrame:
+    # The real quality.py output on the fixture readings (counts: tests/test_quality.py).
+    return quality.assess(clean.clean(inputs, cfg), inputs, windows, cfg).data_quality
 
 
 def summary(cfg, inputs, windows, pd_frame, ev) -> dict:
@@ -174,7 +148,8 @@ def main() -> None:
     pdaily, ev = panel_daily(inputs.panels), events()
     results.write_all(
         OUT, panel_daily=pdaily, events=ev, dispatch=dispatch(windows),
-        data_quality=data_quality(windows), summary=summary(cfg, inputs, windows, pdaily, ev),
+        data_quality=data_quality(cfg, inputs, windows),
+        summary=summary(cfg, inputs, windows, pdaily, ev),
     )  # fmt: skip
     print(f"wrote {OUT}")
 
