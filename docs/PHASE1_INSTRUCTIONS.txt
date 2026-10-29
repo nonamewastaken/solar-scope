@@ -1,0 +1,462 @@
+SOLARSCOPE PHASE 1 COMPLETION GUIDE
+===================================
+Written 2026-10-15. Owner: Khang (INT, EXP, CLS, RPT). DQ stays with dtri.
+Read with: docs/SYSTEM_OVERVIEW.txt (what to build), docs/contracts.md (exact
+shapes). If this guide and contracts.md disagree, contracts.md wins.
+
+
+0. WHERE THINGS STAND
+---------------------
+
+Done (merged to dev in PR #2):
+  SOL-7  repo, uv, CI (ruff format, ruff check, pytest)
+  SOL-8  docs/contracts.md (still marked "draft v1")
+  SOL-9  tests/fixtures/raw + loaded (2 hubs x 3 days, DST, edge cases)
+  SOL-10 config/thresholds.yaml, config.py, results.py
+  SOL-11 quick load.py
+
+Open in Phase 1 (now all yours):
+  SOL-13 EXP  Expected-output formula and hand calculation
+  SOL-14 CLS  Voltage/current signature catalog around service-log dates
+  SOL-15 RPT  PDF layout with fake numbers
+  SOL-16 RPT  servicelog.py: repeat repairs and visit tagging
+  + the "day 2-3" result fixtures from SOL-13/14/15
+
+DQ (dtri) is ahead: draft PRs #3 (SOL-12), #4 (SOL-20 clean.py), and #5 (SOL-21
++ SOL-30 quality.py). #4 and #5 change contracts.md and thresholds.yaml.
+
+Phase 1 was planned for days 1-3 (Oct 4-6), so it is late. Do the work that
+unblocks people first (section 2).
+
+
+1. GROUND RULES
+---------------
+
+Git
+- Branch from origin/dev, NOT from local dev. Local dev tracks the answer key
+  and must never be pushed.
+      git fetch origin
+      git switch -c mvu5/sol-13-expected-handcalc origin/dev
+- One branch and one PR per Linear issue, into dev. Put "SOL-nn" in the PR title.
+- Before every push, run what CI runs:
+      uv run ruff format . && uv run ruff check . && uv run pytest
+
+Answer key
+- Do not open SolarScope_MVP1_AnswerKey_INTERNAL/ during Phase 1-3. The only
+  thing that reads it is scripts/score.py, once, after thresholds are frozen.
+  SOL-14 says this explicitly.
+
+Code
+- Every number you would tune goes in config/thresholds.yaml under your
+  section (expected, decline, classify, dispatch, servicelog). Never in code.
+- Stage modules return DataFrames and never write files. Only run.py
+  (through results.py) and report.py touch disk.
+- Use what is already installed (pandas, numpy, pyyaml, matplotlib). Add no new
+  dependencies in Phase 1.
+- One focused test file per module. No test frameworks beyond pytest.
+
+
+2. ORDER OF WORK
+----------------
+
+  #  What                                         Issue      Unblocks
+  -  -------------------------------------------  ---------  --------------------
+  A  Housekeeping: Linear, owners, DQ contracts   SOL-8..11  dtri merges PR #4/#5
+  B  Formula + hand calculation                   SOL-13     expected.py tests
+  C  Result fixture set (5 files, one folder)     13/14/15   report, summary, score
+  D  Signature catalog                            SOL-14     classify rules
+  E  servicelog.py                                SOL-16     summary.py
+  F  PDF layout from the fixture set              SOL-15     report.py
+
+C comes before D-F because report.py, summary.py and score.py are all built
+against it.
+
+
+3. TASK A: HOUSEKEEPING (about 1 hour)
+--------------------------------------
+
+Linear
+- Move SOL-8, 9, 10, 11 to Done (PR #2 is merged into dev).
+- Assign yourself the EXP/CLS/RPT issues: SOL-13..16, 22..27, 31..33, plus the
+  INT backlog SOL-17, 18, 19, 28, 29.
+
+Docs (one small PR)
+- SYSTEM_OVERVIEW.txt sections 5 and 14: change Member 3/4/5 to Khang.
+- README.md team section: same change.
+
+Contracts (SOL-8 sign-off)
+- Review the contracts.md diffs in dtri's PRs #4 and #5. They add:
+    * validation.sentinel_measures (a sentinel applies only to the listed
+      measures)
+    * clean: clock-offset correction, plus timestamp_raw_utc and
+      clock_offset_min on cleaned.flags, plus cleaned.clock_offsets
+    * quality.is_usable(canonical): the single definition of a usable
+      panel-interval. expected.py MUST call this, not re-implement it.
+    * sensor_periods.sensor = the measure name
+- As the new EXP/CLS/RPT owner, review sections 5-9 yourself, then change the
+  status line at the top of contracts.md to "agreed v1 (<date>)".
+- Ask dtri for tests/fixtures/quality/data_quality.csv (part of SOL-12). Task C
+  needs it. If it isn't ready, hand-write a placeholder (see C3) and replace it
+  later.
+
+
+4. TASK B: SOL-13 EXPECTED-OUTPUT FORMULA AND HAND CALCULATION
+--------------------------------------------------------------
+
+Deliverables
+  docs/expected_method.md                 formula, assumptions, peer method
+  tests/fixtures/handcalc/handcalc.csv    10-20 real rows, worked by hand
+
+B1. Physics baseline (write it down exactly)
+
+    P_exp_w    = P_stc * (G / 1000) * (1 + gamma * (T - T_ref))
+    P_stc      = site.json > module > stc_rating_w            (400)
+    gamma      = site.json > module > temp_coefficients >
+                 pmax_pct_per_c / 100                          (-0.0035)
+    T_ref      = expected.reference_temp_c                     (25)
+    G          = irradiance_used_wm2 (from quality: hub value, or row median)
+    T          = temp_c (back-of-panel; state this assumption: cell temp is a
+                 few C higher, so expected is slightly optimistic in sun)
+    energy_kwh = power_w * interval_min / 60 / 1000            (interval = 15)
+
+  Worked example to put in the doc:
+    G = 800, T = 45  ->  400 * 0.8 * (1 - 0.0035 * 20) = 297.6 W = 0.0744 kWh
+    V = 33.0, I = 8.6 -> 283.8 W = 0.07095 kWh
+    deficit = 0.00345 kWh (4.6 %)
+
+  Rules to state:
+  - Skip intervals with G < expected.min_irradiance_wm2 (50). is_daylight is
+    false for them.
+  - Daily measured_kwh and expected_kwh are summed over the SAME intervals
+    (usable and daylight). Otherwise gaps show up as fake losses.
+  - loss_kwh = max(expected_kwh - measured_kwh, 0).
+
+B2. Peer baseline (write it down)
+  - Raw interval ratio = panel power / median power of its usable hub mates
+    (itself excluded). With fewer than expected.peer.min_peers usable hub
+    mates, use the usable panels in the same row.
+  - "Healthy peer" means usable and daylight. It must NOT depend on
+    classification (classification comes later, so that would be circular).
+  - Normalize: peer_ratio = raw ratio / the panel's reference ratio. Reference
+    ratio = median daily raw ratio over the panel's first
+    expected.peer.reference_period_days days with usable data. If the data is
+    shorter than that (the fixtures are), use all days.
+  - State the limit: a whole hub or row that is down together has peer ratio
+    ~1. Physics catches that case; peer ratio says WHO, physics says HOW MUCH.
+
+B3. Hand calculation on real rows
+  Pick 10-20 rows from input/mvp1/readings.csv:
+  - 3-4 hubs across rows, e.g. H01, H06, H11 (avoid row 3 after January:
+    sensor drift)
+  - 2 clear days (weather ACSH < 30) and 1 cloudy day (ACSH > 80), in
+    Sep-Oct 2025 (before snow)
+  - G between 200 and 1000, and no sentinel, missing or out-of-range values
+  Work each row in a spreadsheet, NOT with project code. Save the result as
+  tests/fixtures/handcalc/handcalc.csv with these columns:
+    timestamp_utc, hub_id, panel_id, irradiance_wm2, temp_c, voltage_v,
+    current_a, power_w, energy_kwh, expected_power_w, expected_kwh, deficit_kwh
+  In Phase 2 (SOL-22), test_expected.py loads it and asserts that expected.py
+  is within expected.hand_calc_tolerance_pct (2 %). That test covers the
+  brief's "within 2% of a hand calculation".
+
+Done when: the doc and CSV are merged, and the numbers are checked twice.
+
+
+5. TASK C: THE RESULT FIXTURE SET (the "day 2-3" part of SOL-13/14/15)
+---------------------------------------------------------------------
+
+The original plan split these into expected/, events/, dispatch/ and summary/
+folders, one per owner. You now own all of them, and report.render(results_dir)
+reads one folder. So build ONE folder that looks like a real output folder:
+
+  tests/fixtures/results/
+      data_quality.csv   (from dtri, or your placeholder)
+      panel_daily.csv
+      events.csv
+      dispatch.csv
+      summary.json
+
+Update the table in tests/fixtures/README.md to match.
+
+Skipped: a hand-written exp.intervals fixture (292 x 6 rows). It existed so CLS
+did not have to wait for EXP. Both are you now, so classify tests in Phase 2 use
+expected.py v1 output directly.
+
+These are FORMAT and CONSISTENCY fixtures. They follow the contract column for
+column and agree with each other. They do not have to be derivable from the
+fixture readings. Fixtures with readings that really show each signature come
+in Phase 2 (SOL-24).
+
+C1. Facts the fixture must match
+  site_id SS-FIXTURE-001; panels P01-P06; hubs H01 (P01-03), H02 (P04-06);
+  row R1; string S1; local days 2025-11-01..03.
+  Windows derived from the fixture data:
+    365d = 2024-11-04 .. 2025-11-03
+    180d = 2025-05-08 .. 2025-11-03
+  Both windows contain all 3 days, so the two summary blocks have the same
+  numbers and only start/days differ. Test window filtering in unit tests with
+  a shorter window.
+
+C2. The story (one event per label, so every report page has content)
+  E0001 weather/cloud        array  2025-11-02 all day   resolved
+        (overcast day in weather.csv; matches SR-9001, no fault -> avoidable)
+  E0002 fault/wiring         panel  P05, 11-01..11-03 10:00   resolved
+        (repaired by SR-9002 on 11-03, so NOT dispatched)
+  E0003 fault/hotspot        panel  P02, 11-03 from 09:00     active
+        -> dispatch D001 in both windows, priority from kWh/day
+  E0004 data_issue/data_gap  hub    H02, 11-03 14:00-15:00 local (the
+        real 19:00-20:00Z gap)                                resolved
+  E0005 early_warning/slow_decline  panel P03  first_flag_date 2025-11-02,
+        decline_rate -1.5, current_deficit_pct 4.0,
+        projected_10pct_date 2026-03-01                       active
+  E0006 unresolved/unknown   panel  P06, a 2 h dip on 11-01   resolved
+
+  Repeat repairs: the raw service log has only 1 fault visit, so
+  repeat_repairs would be empty. Add one P05 wiring visit with
+  fault_found = Y (e.g. SR-9003 on 2025-10-20) to make_fixtures.py,
+  APPENDED as the last row so rows 0 and 1 keep their positions. Regenerate,
+  then update the one assertion that changes in test_load.py
+  (fault_found == [False, True] becomes [False, True, True]).
+  P05 then has n_repairs = 2.
+
+C3. File by file
+  panel_daily.csv  18 rows (6 panels x 3 days). daily_label follows the story:
+                   the label that cost the panel the most kWh that day, else
+                   "normal". loss_kwh > 0 only on labelled panel-days.
+                   Decline columns filled for P03, NaN/False elsewhere.
+  events.csv       the 6 events above. The early-warning columns are filled
+                   only on E0005.
+  dispatch.csv     2 rows: (365d, D001, P02, E0003) and (180d, D001, P02, E0003).
+  data_quality.csv 4 rows (2 hubs x 2 windows). Placeholder: expected_intervals
+                   = window days x 96 (+4 for the fall-back day if it is in
+                   the window). For the counts, use the edge-case table in
+                   tests/fixtures/README.md (H01: 1 duplicate, 1 sentinel,
+                   1 out_of_range, 1 missing; H02: 1 conflict, 1 sentinel,
+                   1 out_of_range, 1 missing, 4 gap intervals).
+  summary.json     shape from contracts.md 9.5. config_hash and config from
+                   config.load_config(None, tests/fixtures/raw/site.json).
+                   input_checksums from load.load_inputs. Numbers come from the
+                   other 4 files (see C4).
+
+C4. One test: tests/test_result_fixtures.py
+  - every CSV's columns == results.SCHEMAS[name], in order
+  - summary.json has every key in results.SUMMARY_KEYS
+  - for each window: kwh_lost_by_label[x] == sum of panel_daily.loss_kwh where
+    daily_label == x; kwh_lost_total == the sum of kwh_lost_by_label
+  - every dispatch.event_id exists in events with label fault, status active
+  - event_id matches E\d{4}; dispatch_id matches D\d{3}
+  This test is also the executable version of the contract for summary.py
+  (SOL-27). Keep it green.
+
+Done when: the folder is merged and test_result_fixtures.py passes in CI.
+
+
+6. TASK D: SOL-14 SIGNATURE CATALOG
+-----------------------------------
+
+Deliverables
+  scripts/catalog_signatures.py   throwaway plotting script (commit it, like
+                                  dtri's scripts/profile_readings.py)
+  docs/signatures.md              the one-page table: the classify rules
+
+D1. The script
+  - Load with solarscope.load.load_inputs (no cleaning yet). Before plotting,
+    set values outside cfg valid_ranges or equal to a sentinel to NaN.
+  - Arguments: --panels P13,P14 --start 2025-11-01 --end 2025-11-10
+  - For each panel, plot V, I, T and P against its hub mates, with the hub's
+    irradiance and the weather row (SNWD, ACSH, TMAX, PRCP) for each day.
+  - Write the PNGs to output/signatures/ (git-ignored). Do not commit the PNGs.
+
+D2. Look at these (dates from service_log.csv and weather.csv)
+  Fault candidates
+    S2 string outage   2025-11-04..07  row R2, H05-H08, P13-P24  (SR-1003)
+    P22 connector      weeks before 2025-12-18, 2026-02-24, 2026-05-01
+                       (SR-1006/1009/1013). Also check AFTER 2026-05-01: only
+                       the panel side was replaced, so it may still be active.
+    P34 low mornings   around 2026-04-28, morning hours only, vs P35/P36
+                       (SR-1012, the tech said "unknown")
+  Weather
+    Snow     2025-12-07..09 (SR-1005), 2026-01-16..18 storm, 37 in on the
+             ground (SR-1007/1008: row 3 drifted and worst), 2026-03-01..02
+             (SR-1010)
+    Cloud    early Oct 2025 (SR-1002, H05), 2026-06-12..16 (SR-1016)
+    Heat     2026-07-14..20, TMAX 93-96 F (SR-1017)
+    Soiling  weeks before the 2026-05-14 cleaning (SR-1015, heavier on row 3),
+             and the Jul-Aug 2026 dry spell (SR-1018). Check the step up after
+             cleaning and after rain.
+  Sensor and data (owned by DQ, but classify must not call them faults)
+    Row 3 irradiance drift after the January storm (H09-H12 vs rows 1-2)
+    H09 humidity stuck at 100 % (SR-1011, 2026-03-19)
+    Hub offline: H04 2025-11-24 (SR-1004), H11 ~2026-05-04..06 (SR-1014)
+    H02 clock offset in April (found by dtri)
+
+  Watch out: SNWD > 0 on 107 days from Dec to Mar. That is snow on the ground,
+  and panels shed snow much sooner. SNWD > 0 is a gate, not proof. Use the
+  readings: many panels low at once, current ~0 with voltage present, recovery
+  order by row. The hub reference cell can be snow-covered too, so the physics
+  baseline can look "fine" during snow.
+
+D3. Scans for faults the service log does not mention
+  The brief seeds 6 faults, and the log names only some of them. Without the
+  answer key, scan every panel for:
+    - voltage about 2/3 of hub mates at normal current (hotspot/bypass diode):
+      daily median V / median V of hub mates < 1 - classify.hotspot.voltage_step_frac
+      + tolerance
+    - intermittent zero current while hub mates produce (wiring)
+    - steady downward trend in daily P / hub-mates P (slow decline)
+  List what you find in signatures.md as "candidates". Do not label them as
+  confirmed.
+
+D4. docs/signatures.md table, one row per case
+  case | dates | scope | V | I | T | hub G | weather | rule | config keys
+  - Confirm or correct each starting signature in SYSTEM_OVERVIEW section 4,
+    Stage 5.
+  - Write every proposed number into thresholds.yaml (classify:) and list its
+    key in the table. Nothing is tuned against the answer key.
+
+Done when: the table covers every label/cause in contracts.md section 7, and
+the classify thresholds hold the numbers you saw in the data.
+
+
+7. TASK E: SOL-16 servicelog.py
+-------------------------------
+
+Contract: servicelog.analyze(service_log, events, windows, cfg) -> ServiceLog
+          with .visits and .repeat_repairs (contracts.md section 8)
+
+E1. repeat_repairs
+  - Explode panel_list on visits with fault_found. Group by panel_id. Keep
+    panels with at least servicelog.repeat_min_repairs repairs.
+  - hub_id: from cfg.site["panels"]
+  - ticket_ids and visit_dates: lists, sorted by date
+  - root_cause: from the latest repair
+  - permanent_fix: from a config map, not from code. Add:
+        servicelog:
+          permanent_fix:
+            wiring: "Replace both connector halves with a matched pair from one maker"
+            string_outage: "Replace fuse holder; inspect combiner for heat damage"
+            hotspot: "Replace module under warranty"
+  - On real data, expect P22 with 3 repairs (SR-1006, SR-1009, SR-1013),
+    cause "cross mated connectors". SR-1003 (S2 fuse) is 1 repair on each of
+    12 panels, so it is not a repeat.
+
+E2. visits
+  - matched_event_ids: events that overlap
+    [visit_date - servicelog.match_window_days, visit_date] and share a panel
+    with the visit ("ALL" matches every panel)
+  - explained_by: label of the matched event with the largest kwh_lost, or ""
+  - avoidable: not fault_found AND trigger != "scheduled" AND explained_by is
+    in servicelog.avoidable_labels. Add avoidable_labels to the config.
+    Recommended start: [weather] (see decision 5 in section 9).
+
+E3. Tests: tests/test_servicelog.py on the fixture service log + fixture events
+  - P05 is a repeat (after C2 adds SR-9003)
+  - SR-9001 matches E0001, explained_by weather, avoidable
+  - SR-9002 is not avoidable (a fault was found)
+  - a scheduled visit is never avoidable
+  Smoke run on input/mvp1 (prints only, not a test): P22 shows 3 repairs.
+
+Done when: tests pass and the real-data smoke run lists P22.
+
+
+8. TASK F: SOL-15 PDF LAYOUT
+----------------------------
+
+Change from the issue: render from tests/fixtures/results/ (Task C) instead of
+a hard-coded dict. The fixture already holds fake numbers, and the code that
+results is the start of SOL-26.
+
+Library: matplotlib PdfPages (already installed). Letter portrait. One figure
+per page, axis off, fig.text for headings, ax.table for tables.
+
+F1. Shape of solarscope/report.py
+  build_pages(results_dir) -> {window_name: [Page, ...6]}
+      Reads the 5 files, filters by window, formats and rounds numbers. Does
+      no analytics. Page = title + text lines + tables (plain lists).
+  draw(pages, pdf_path)
+      Only matplotlib. No numbers are computed here.
+  render(results_dir) -> list[Path]
+      Writes report_<window>.pdf for every window in summary.json["windows"].
+      Window names and dates always come from the file.
+  Splitting build from draw lets tests check the numbers on the Page objects,
+  without parsing PDF text.
+
+F2. The 6 pages (source in brackets)
+  1 Summary          kWh actual/expected/lost, fault vs weather split, counts,
+                     top 3 findings [summary.json window block]
+  2 Fault or Weather kWh lost by label and cause, then the top N events by
+                     kWh [events.csv]. "Every event" will not fit on one page
+                     with a year of cloud days. Show the top N and the totals,
+                     and say "full list: events.csv".
+  3 Dispatch List    one line per dispatch_id (a string outage is 12 panels on
+                     1 line), priority, cause, evidence, kWh [dispatch.csv]
+  4 Repeat Repairs   [summary.json repeat_repairs]. Handle an empty list:
+                     "No panel repaired more than once".
+  5 Early Warnings   panel, rate %/month, first flag, projected 10 % date
+                     [events.csv label early_warning]
+  6 Data Quality     usable % per hub, excluded periods, rules used (from
+     and Method      summary.json config), run ID, config hash, input checksums
+                     [data_quality.csv, summary.json]
+  Every table has a row cap (a module constant). Exactly 6 pages, always.
+
+F3. Test: tests/test_report.py
+  - render(copy of the fixture folder in tmp_path) writes 2 PDFs
+  - each PDF has 6 pages. Count b"/Type /Page" occurrences that are not
+    followed by "s"; matplotlib writes these uncompressed, so no new
+    dependency is needed.
+  - page 1 of 365d contains the fixture's kwh_lost_total, formatted
+
+Done when: both PDFs open cleanly, have 6 pages each, and contain no raw
+readings.
+
+
+9. DECISIONS TO RECORD (answer in contracts.md or the config, not in chat)
+--------------------------------------------------------------------------
+
+1. A single missing hub irradiance value (not a whole excluded period): row
+   median fallback or NaN? Agree with dtri. It changes is_usable and
+   usable_pct.
+2. Peer reference period = the first N days with usable data (section B2).
+   Fine unless a panel is already faulty in its first 30 days.
+3. Measured and expected summed over the same intervals (section B1).
+   Recommended: yes.
+4. Repeat repairs per window. The 180d window contains only P22's 3rd repair.
+   Recommended: show a panel if ANY of its repairs falls in the window, and
+   list its full history. Otherwise the 180-day report hides the worst repeat
+   problem.
+5. Which no-fault visits count as "truck rolls avoided"? Scheduled visits:
+   never. Weather: yes. Hub offline (SR-1004 needed a breaker reset on site,
+   SR-1014 came back by itself) and the hub sensor visit (SR-1011): judgment.
+   Start with avoidable_labels: [weather] and widen it only with a reason.
+6. Report page 2 shows the top N events plus totals, not every event (section
+   F2).
+7. Fixtures: one tests/fixtures/results/ folder instead of 4 per-owner folders
+   (section 5).
+
+
+10. PHASE 1 EXIT CHECKLIST
+--------------------------
+
+  [ ] SOL-8..11 Done in Linear; owners updated in Linear, SYSTEM_OVERVIEW and
+      README
+  [ ] contracts.md marked "agreed v1"; dtri's contract changes merged
+  [ ] docs/expected_method.md + tests/fixtures/handcalc/handcalc.csv  (SOL-13)
+  [ ] tests/fixtures/results/ (5 files) + test_result_fixtures.py green
+  [ ] docs/signatures.md + classify thresholds in the config           (SOL-14)
+  [ ] solarscope/servicelog.py + tests, P22 found on real data         (SOL-16)
+  [ ] report.py renders 2 x 6-page PDFs from the fixture folder        (SOL-15)
+  [ ] Decisions 1-7 written down
+  [ ] CI green on dev
+
+
+11. WHAT PHASE 2 STARTS WITH (for planning, not Phase 1 work)
+-------------------------------------------------------------
+
+  SOL-17 run.py with every stage stubbed. Do this FIRST in Phase 2, so each
+         module plugs in as it lands.
+  SOL-18 load.py validation (ID mismatches, missing columns, clear errors)
+  SOL-22 expected.py v1 on load output with naive cleaning (do not wait for DQ)
+  SOL-24/25 classify + dispatch, built on signatures.md
+  SOL-27 summary.py (test_result_fixtures.py is its contract)
+  SOL-26 report.py: swap the fixture folder for real outputs
+  SOL-19 score.py against the answer key (run once, in Phase 3)
