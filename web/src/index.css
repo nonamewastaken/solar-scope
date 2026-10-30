@@ -1,0 +1,83 @@
+/* Tokens mirror the Figma "Theme" collection (Day / Night modes). */
+:root {
+  --bg-canvas: #0a0f1e;
+  --bg-surface: #111a2e;
+  --bg-surface-2: #18233c;
+  --border: #25314f;
+  --text: #e7ecf7;
+  --text-2: #a4aec8;
+  --text-muted: #7f8aa8;
+  --accent: #f5b83d;
+  --on-accent: #0a0f1e;
+  --status-fault: #ff6b6b;
+  --status-weather: #6aa6ff;
+  --status-warning: #ffa14a;
+  --status-sensor: #b39dff;
+  --status-ok: #4cd69b;
+  --grid: #25314f;
+  --grid-opacity: .5;
+  --rack: #6a7592;
+  --cell: #7f8aa8;
+  --shadow-ground: .4;
+  --card-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+  --ink-300: #7f8aa8;
+  --ink-400: #6a7592;
+  --ink-500: #46516e;
+  --ink-600: #25314f;
+  --ink-700: #18233c;
+  --on-fault: #0a0f1e;
+  --status-ok-text: #4cd69b;
+  --wall-shadow: 1;
+  --wall-face: #18233c;
+  --wall-top: #25314f;
+  --wall-end: #111a2e;
+  --ticket-shadow: 0 8px 20px rgba(0, 0, 0, .45);
+  --font-ui: 'DM Sans', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+:root[data-theme='day'] {
+  --bg-canvas: #f7f3ed;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #efece3;
+  --border: #e2ddd0;
+  --text: #1b1a16;
+  --text-2: #5a5647;
+  --text-muted: #6b6657;
+  --accent: #d9900a;
+  --on-accent: #1b1a16;
+  --status-fault: #d23f3f;
+  --status-weather: #2f72d0;
+  --status-warning: #db6d12;
+  --status-sensor: #7c4de0;
+  --status-ok: #23915f;
+  --grid: #e2ddd0;
+  --grid-opacity: 1;
+  --rack: #8b8676;
+  --cell: #7f8aa8;
+  --shadow-ground: .14;
+  --card-shadow: 0 10px 32px rgba(41, 31, 10, .09);
+  --on-fault: #ffffff;
+  --status-ok-text: #5a5647;
+  --wall-shadow: .35;
+  --wall-face: #d6d0c1;
+  --wall-top: #c9c3b3;
+  --wall-end: #bfb8a6;
+  --ticket-shadow: 0 6px 16px rgba(41, 31, 10, .12);
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg-canvas);
+  color: var(--text);
+  font: 400 15px/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--text); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+button { font: inherit; color: inherit; }
+h1, h2, h3, h4, p { margin: 0; }
